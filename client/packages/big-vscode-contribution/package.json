@@ -52,7 +52,8 @@
     "@eclipse-glsp/vscode-integration": "*",
     "@types/vscode": "^1.63.0",
     "reflect-metadata": "^0.2.2",
-    "vscode-messenger": "^0.4.5"
+    "vscode-messenger": "^0.4.5",
+    "vscode-messenger-common": "^0.4.5"
   },
   "peerDependencies": {
     "inversify": "^6.2.1"

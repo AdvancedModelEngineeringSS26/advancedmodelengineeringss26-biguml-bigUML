@@ -8,14 +8,23 @@
  **********************************************************************************/
 
 import type { WebviewEndpointOptions } from '@eclipse-glsp/vscode-integration';
-import { injectable } from 'inversify';
-import type { WebviewEndpointFactory, VscodeWebviewEndpoint } from '../common/webview-endpoint.js';
+import { injectable, multiInject, optional } from 'inversify';
+import { TYPES } from '../common/types.js';
+import type { WebviewEndpointContribution, WebviewEndpointFactory, VscodeWebviewEndpoint } from '../common/webview-endpoint.js';
 import { InjectableWebviewEndpoint } from './webview-endpoint.js';
 
 @injectable()
 export class DefaultWebviewEndpointFactory implements WebviewEndpointFactory {
+    constructor(
+        @multiInject(TYPES.WebviewEndpointContribution) @optional()
+        protected readonly contributions: WebviewEndpointContribution[] = []
+    ) {}
+
     create(options: WebviewEndpointOptions): VscodeWebviewEndpoint {
-        // Phase 1 scaffold: replace direct construction with a child-container factory in Phase 5.
-        return new InjectableWebviewEndpoint(options);
+        const endpoint = new InjectableWebviewEndpoint(options);
+        for (const contribution of this.contributions) {
+            endpoint.trackDisposable(contribution.onEndpointInitialized(endpoint));
+        }
+        return endpoint;
     }
 }

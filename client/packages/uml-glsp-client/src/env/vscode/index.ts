@@ -10,3 +10,4 @@
 export * from './editor.module.js';
 export * from './editor.webview-editor-provider.js';
 export * from './features/theme/index.js';
+export * from './uml-webview-endpoint-adapter.js';
