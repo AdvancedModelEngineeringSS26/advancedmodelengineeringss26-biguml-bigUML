@@ -24,5 +24,6 @@ export const TYPES = {
     DocumentManager: Symbol('DocumentManager'),
     WebviewEndpointFactory: Symbol('WebviewEndpointFactory'),
     WebviewEndpointContribution: Symbol('WebviewEndpointContribution'),
+    MessagePropagationFilter: Symbol('MessagePropagationFilter'),
     VscodeActionHandler: Symbol('VscodeActionHandler')
 } as const;

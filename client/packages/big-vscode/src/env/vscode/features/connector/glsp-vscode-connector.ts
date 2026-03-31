@@ -6,80 +6,75 @@
  *
  * SPDX-License-Identifier: MIT
  *********************************************************************************/
-import { TYPES as CONTRIBUTION_TYPES, type MessageOrigin as ContributionMessageOrigin } from '@borkdominik-biguml/big-vscode-contribution';
+import { TYPES as CONTRIBUTION_TYPES } from '@borkdominik-biguml/big-vscode-contribution';
 import type {
-    ActionDispatcher as ContributionActionDispatcher,
     ActionListener as ContributionActionListener,
-    ActionRouter as ContributionActionRouter,
     ClientManager as ContributionClientManager,
-    DocumentManager as ContributionDocumentManager
+    VscodeConnector as ContributionVscodeConnector
 } from '@borkdominik-biguml/big-vscode-contribution/vscode';
-import {
-    type Action,
-    ActionMessage,
-    type Args,
-    Disposable,
-    type GlspVscodeClient,
-    GlspVscodeConnector,
-    type GlspVscodeServer,
-    MessageOrigin,
-    type MessageProcessingResult
-} from '@eclipse-glsp/vscode-integration';
+import { type Action, ActionMessage, type Args, Disposable, type GlspVscodeClient, type GlspVscodeServer } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import type * as vscode from 'vscode';
+import { Messenger } from 'vscode-messenger';
 import { VscodeAction } from '../../../common/vscode.action.js';
 import { TYPES } from '../../vscode-common.types.js';
 
+@injectable()
+export class VscodeHandledActionRegistry {
+    protected readonly actionKinds = new Set<string>();
+
+    register(actionKind: string): Disposable {
+        this.actionKinds.add(actionKind);
+        return Disposable.create(() => {
+            this.actionKinds.delete(actionKind);
+        });
+    }
+
+    has(actionKind: string): boolean {
+        return this.actionKinds.has(actionKind);
+    }
+}
+
+@injectable()
+export class BigVscodeMessagePropagationFilter {
+    constructor(@inject(VscodeHandledActionRegistry) protected readonly handledActions: VscodeHandledActionRegistry) {}
+
+    filter(message: unknown, origin: 'client' | 'server'): unknown | undefined {
+        if (origin !== 'client' || !ActionMessage.is(message)) {
+            return message;
+        }
+
+        const action = message.action;
+        if (VscodeAction.isExtensionOnly(action) || this.handledActions.has(action.kind)) {
+            return undefined;
+        }
+
+        return message;
+    }
+}
+
 /**
- * The `Connector` acts as the bridge between GLSP-Clients and the GLSP-Server
- * and is at the core of the Glsp-VSCode integration.
+ * Temporary compatibility facade for the existing `big-vscode` service surface.
  *
- * It works by being providing a server that implements the `GlspVscodeServer`
- * interface and registering clients using the `GlspVscodeConnector.registerClient`
- * function. Messages sent between the clients and the server are then intercepted
- * by the connector to provide functionality based on the content of the messages.
- *
- * Messages can be intercepted using the interceptor properties in the options
- * argument.
- *
- * Please use the respective wrappers instead of using this class directly.
+ * This facade remains only to preserve the public API expected by the
+ * rest of the extension until the wrapper layer is removed in a later phase.
  */
 @injectable()
-export class BigGlspVSCodeConnector<
-    TDocument extends vscode.CustomDocument = vscode.CustomDocument
-> extends GlspVscodeConnector<TDocument> {
+export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vscode.CustomDocument> implements vscode.Disposable {
     protected readonly vscodeHandledActions = new Set<string>();
+    readonly messenger = new Messenger({ ignoreHiddenViews: false });
 
     constructor(
-        @inject(TYPES.GlspServer) glspServer: GlspVscodeServer,
+        @inject(TYPES.GlspServer) protected readonly glspServer: GlspVscodeServer,
+        @inject(CONTRIBUTION_TYPES.VscodeConnector)
+        protected readonly contributionConnector: ContributionVscodeConnector<TDocument>,
         @inject(CONTRIBUTION_TYPES.ClientManager)
         protected readonly clientManager: ContributionClientManager<TDocument>,
         @inject(CONTRIBUTION_TYPES.ActionListener)
         protected readonly contributionActionListener: ContributionActionListener,
-        @inject(CONTRIBUTION_TYPES.ActionRouter)
-        protected readonly contributionActionRouter: ContributionActionRouter<TDocument>,
-        @inject(CONTRIBUTION_TYPES.ActionDispatcher)
-        protected readonly contributionActionDispatcher: ContributionActionDispatcher<TDocument>,
-        @inject(CONTRIBUTION_TYPES.DocumentManager)
-        protected readonly contributionDocumentManager: ContributionDocumentManager<TDocument>
-    ) {
-        super({
-            server: glspServer,
-            logging: false,
-            onBeforeReceiveMessageFromServer: (message, callback) => {
-                callback(message);
-            },
-            onBeforeReceiveMessageFromClient: (message, callback) => {
-                callback(message);
-            },
-            onBeforePropagateMessageToClient: (_originalMessage, processedMessage, _messageChanged) => {
-                return processedMessage;
-            },
-            onBeforePropagateMessageToServer: (_originalMessage, processedMessage, _messageChanged) => {
-                return processedMessage;
-            }
-        });
-    }
+        @inject(VscodeHandledActionRegistry)
+        protected readonly handledActions: VscodeHandledActionRegistry
+    ) {}
 
     get documents(): TDocument[] {
         return this.clients.map(client => client.document);
@@ -94,191 +89,110 @@ export class BigGlspVSCodeConnector<
     }
 
     get onDidRegister(): vscode.Event<GlspVscodeClient<TDocument>> {
-        return this.clientManager.onDidRegister;
+        return this.contributionConnector.onDidRegister;
     }
 
     get onDidDispose(): vscode.Event<GlspVscodeClient<TDocument>> {
-        return this.clientManager.onDidDispose;
+        return this.contributionConnector.onDidDispose;
     }
 
-    get onServerActionMessage(): vscode.Event<ActionMessage> {
+    get onServerActionMessage(): vscode.Event<any> {
         return this.contributionActionListener.onServerAction;
     }
 
-    get onClientActionMessage(): vscode.Event<ActionMessage> {
+    get onClientActionMessage(): vscode.Event<any> {
         return this.contributionActionListener.onClientAction;
     }
 
-    get onVSCodeActionMessage(): vscode.Event<ActionMessage> {
+    get onVSCodeActionMessage(): vscode.Event<any> {
         return this.contributionActionListener.onVscodeAction;
     }
 
-    override get onDidChangeCustomDocument():
+    get onDidChangeCustomDocument():
         | vscode.Event<vscode.CustomDocumentEditEvent<TDocument>>
         | vscode.Event<vscode.CustomDocumentContentChangeEvent<TDocument>> {
-        return this.contributionDocumentManager.onDidChangeCustomDocument;
+        return this.contributionConnector.onDidChangeCustomDocument;
     }
 
     registerVscodeHandledAction(actionKind: string): Disposable {
         this.vscodeHandledActions.add(actionKind);
+        const registryDisposable = this.handledActions.register(actionKind);
         return Disposable.create(() => {
             this.vscodeHandledActions.delete(actionKind);
+            registryDisposable.dispose();
         });
     }
 
     clientIdByDocument(document: TDocument): string | undefined {
-        return this.clientManager.getClientId(document);
+        return this.contributionConnector.clientIdByDocument(document);
     }
 
-    public override async registerClient(client: GlspVscodeClient<TDocument>): Promise<void> {
-        const toDispose: Disposable[] = [
-            Disposable.create(() => {
-                this.diagnostics.set(client.document.uri, undefined); // this clears the diagnostics for the file
-                this.clientMap.delete(client.clientId);
-                this.documentMap.delete(client.document);
-                this.clientSelectionMap.delete(client.clientId);
-                this.clientProgressMap.get(client.clientId)?.forEach(reporter => reporter.deferred.resolve());
-                this.clientProgressMap.delete(client.clientId);
-            })
-        ];
-        this.clientMap.set(client.clientId, client);
-        this.documentMap.set(client.document, client.clientId);
-        this.clientProgressMap.set(client.clientId, new Map());
-        this.clientManager.register(client, { managePanelLifecycle: false });
-
-        // Cleanup when client panel is closed
-        const panelOnDisposeListener = client.webviewEndpoint.webviewPanel.onDidDispose(async () => {
-            this.onClientDispose(client, toDispose);
-            panelOnDisposeListener.dispose();
+    async registerClient(client: GlspVscodeClient<TDocument>): Promise<void> {
+        await this.contributionConnector.registerClient(client, {
+            disposeClientSessionArgs: this.disposeClientSessionArgs(client)
         });
+    }
 
-        toDispose.push(
-            client.webviewEndpoint.onActionMessage(message => {
-                this.onClientMessage(client, message);
-            })
-        );
-
-        // Initialize glsp client
-        const glspClient = await this.options.server.glspClient;
-        toDispose.push(client.webviewEndpoint.initialize(glspClient));
-        toDispose.unshift(
-            Disposable.create(() =>
-                glspClient.disposeClientSession({ clientSessionId: client.clientId, args: this.disposeClientSessionArgs(client) })
-            )
-        );
+    sendActionToActiveClient(action: Action): void {
+        this.dispatchAction(action);
     }
 
     public sendActionToActiveServer(action: Action): void {
         this.clients.forEach(client => {
             if (client.webviewEndpoint.webviewPanel.active) {
-                const message = {
+                client.webviewEndpoint.sendMessage({
                     clientId: client.clientId,
-                    action: action
-                };
-                client.webviewEndpoint.sendMessage(message);
+                    action
+                });
             }
         });
     }
 
     public sendActionToServer(clientId: string, action: Action): void {
-        this.options.server.onSendToServerEmitter.fire({
+        this.glspServer.onSendToServerEmitter.fire({
             clientId,
             action
         });
     }
 
-    override saveDocument(document: TDocument, destination?: vscode.Uri): Promise<void> {
-        return this.contributionDocumentManager.saveDocument(document, destination);
-    }
-
-    override revertDocument(document: TDocument, diagramType: string): Promise<void> {
-        return this.contributionDocumentManager.revertDocument(document, diagramType);
-    }
-
-    protected override sendMessageToClient(clientId: string, message: unknown): void {
-        const client = this.clientManager.getClient(clientId);
-        if (client && ActionMessage.is(message)) {
-            client.webviewEndpoint.sendMessage(message);
-        }
-    }
-
-    override dispatchAction(action: Action, clientId?: string): void {
+    dispatchAction(action: Action, clientId?: string): void {
         const client = clientId ? this.clientManager.getClient(clientId) : this.activeClient;
         if (!client) {
             console.warn('Could not dispatch action: No client found for clientId or no active client found.', action);
             return;
         }
-        const message = { clientId: client.clientId, action };
-        const dispatched = this.contributionActionDispatcher.dispatch(action, client.clientId);
 
+        const dispatched = this.contributionConnector.dispatchAction(action, client.clientId);
         if (!dispatched && this.vscodeHandledActions.has(action.kind)) {
-            this.contributionActionListener.emitVscodeAction(message);
+            this.contributionActionListener.emitVscodeAction({
+                clientId: client.clientId,
+                action
+            });
         } else if (!dispatched) {
             console.warn('Could not dispatch action. No handler found for action kind:', action.kind);
         }
     }
 
-    protected onClientMessage(_client: GlspVscodeClient<TDocument>, message: unknown): void {
-        if (this.options.logging) {
-            if (ActionMessage.is(message)) {
-                console.log(`Client (${message.clientId}): ${message.action.kind}`, message.action);
-            } else {
-                console.log('Client (no action message):', message);
-            }
-        }
-
-        // Run message through first user-provided interceptor (pre-receive)
-        this.options.onBeforeReceiveMessageFromClient(message, (newMessage, shouldBeProcessedByConnector = true) => {
-            const { processedMessage, messageChanged } = shouldBeProcessedByConnector
-                ? this.processMessage(newMessage, MessageOrigin.CLIENT)
-                : { processedMessage: message, messageChanged: false };
-
-            const filteredMessage = this.options.onBeforePropagateMessageToServer(newMessage, processedMessage, messageChanged);
-
-            if (typeof filteredMessage !== 'undefined') {
-                this.options.server.onSendToServerEmitter.fire(filteredMessage);
-            }
-        });
+    saveDocument(document: TDocument, destination?: vscode.Uri): Promise<void> {
+        return this.contributionConnector.saveDocument(document, destination);
     }
 
-    protected override processMessage(message: unknown, origin: MessageOrigin): MessageProcessingResult {
-        const client = ActionMessage.is(message) ? this.clientManager.getClient(message.clientId) : undefined;
-        const composed = this.contributionActionRouter.processMessage(message, client, this.toContributionOrigin(origin));
-        if (composed.messageChanged) {
-            return composed;
-        }
-
-        const processed = super.processMessage(message, origin);
-
-        if (processed.messageChanged) {
-            return processed;
-        }
-
-        if (
-            ActionMessage.is(message) &&
-            (VscodeAction.isExtensionOnly(message.action) || this.vscodeHandledActions.has(message.action.kind))
-        ) {
-            return {
-                processedMessage: undefined,
-                messageChanged: true
-            };
-        }
-
-        return { processedMessage: message, messageChanged: false };
+    revertDocument(document: TDocument, diagramType: string): Promise<void> {
+        return this.contributionConnector.revertDocument(document, diagramType);
     }
 
-    protected onClientDispose(client: GlspVscodeClient<TDocument>, disposables: vscode.Disposable[]): void {
-        disposables.forEach(disposable => disposable.dispose());
-        this.clientManager.disposeClient(client.clientId);
+    dispose(): void {
+        this.vscodeHandledActions.clear();
+        this.contributionConnector.dispose();
+    }
+
+    isVscodeHandledAction(actionKind: string): boolean {
+        return this.vscodeHandledActions.has(actionKind);
     }
 
     protected disposeClientSessionArgs(client: GlspVscodeClient<TDocument>): Args | undefined {
         return {
-            ['sourceUri']: client.document.uri.path
+            sourceUri: client.document.uri.path
         };
-    }
-
-    protected toContributionOrigin(origin: MessageOrigin): ContributionMessageOrigin {
-        return origin === MessageOrigin.CLIENT ? 'client' : 'server';
     }
 }

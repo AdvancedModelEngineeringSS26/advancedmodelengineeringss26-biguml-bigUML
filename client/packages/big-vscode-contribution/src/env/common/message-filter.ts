@@ -7,8 +7,8 @@
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
 
-export * from './action-handler.js';
-export * from './message-filter.js';
-export * from './message-routing.js';
-export * from './types.js';
-export * from './webview-endpoint.js';
+import type { MessageOrigin } from './message-routing.js';
+
+export interface VscodeMessagePropagationFilter {
+    filter(message: unknown, origin: MessageOrigin): unknown | undefined;
+}
