@@ -7,25 +7,45 @@
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
 
+import { NavigateToExternalTargetAction } from '@eclipse-glsp/protocol';
 import type { ActionMessage, GlspVscodeClient } from '@eclipse-glsp/vscode-integration';
 import { injectable } from 'inversify';
-import type * as vscode from 'vscode';
+import * as vscode from 'vscode';
 import type { VscodeActionHandler } from '../common/action-handler.js';
 import type { MessageOrigin, MessageProcessingResult } from '../common/message-routing.js';
-import { unchangedMessage } from '../common/message-routing.js';
 
 @injectable()
 export class NavigationHandler<TDocument extends vscode.CustomDocument = vscode.CustomDocument>
     implements VscodeActionHandler<TDocument>
 {
-    // Phase 1 scaffold: external target navigation moves in Phase 4.
-    readonly actionKinds: readonly string[] = [];
+    readonly actionKinds = [NavigateToExternalTargetAction.KIND] as const;
 
     handle(
         message: ActionMessage,
         _client: GlspVscodeClient<TDocument> | undefined,
         _origin: MessageOrigin
     ): MessageProcessingResult {
-        return unchangedMessage(message);
+        if (!NavigateToExternalTargetAction.is(message.action)) {
+            return {
+                processedMessage: message,
+                messageChanged: false
+            };
+        }
+
+        const showOptionsKey = 'jsonOpenerOptions';
+        const { uri, args } = message.action.target;
+        const showOptionsField = args?.[showOptionsKey];
+        const parsedShowOptions =
+            typeof showOptionsField === 'string' ? JSON.parse(showOptionsField) : showOptionsField ? JSON.parse(String(showOptionsField)) : {};
+
+        void vscode.window.showTextDocument(vscode.Uri.parse(uri), { ...args, ...parsedShowOptions }).then(
+            () => undefined,
+            () => undefined
+        );
+
+        return {
+            processedMessage: undefined,
+            messageChanged: true
+        };
     }
 }

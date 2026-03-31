@@ -18,6 +18,7 @@ import { DiagnosticsHandler } from './diagnostics-handler.js';
 import { DirtyStateHandler } from './dirty-state-handler.js';
 import { DocumentManager } from './document-manager.js';
 import { ExportHandler } from './export-handler.js';
+import { MessageHandler } from './message-handler.js';
 import { NavigationHandler } from './navigation-handler.js';
 import { ProgressHandler } from './progress-handler.js';
 import { SelectionHandler } from './selection-handler.js';
@@ -44,6 +45,7 @@ export function createVscodeContributionModule(options: VscodeContributionModule
         bind(TYPES.WebviewEndpointFactory).to(DefaultWebviewEndpointFactory).inSingletonScope();
         bind(TYPES.VscodeConnector).to(VscodeConnector).inSingletonScope();
 
+        bind(TYPES.MessageHandler).to(MessageHandler).inSingletonScope();
         bind(TYPES.DirtyStateHandler).to(DirtyStateHandler).inSingletonScope();
         bind(TYPES.DiagnosticsHandler).to(DiagnosticsHandler).inSingletonScope();
         bind(TYPES.ProgressHandler).to(ProgressHandler).inSingletonScope();
@@ -51,6 +53,7 @@ export function createVscodeContributionModule(options: VscodeContributionModule
         bind(TYPES.ExportHandler).to(ExportHandler).inSingletonScope();
         bind(SelectionHandler).toSelf().inSingletonScope();
 
+        bind(TYPES.VscodeActionHandler).toService(TYPES.MessageHandler);
         bind(TYPES.VscodeActionHandler).toService(SelectionHandler);
         bind(TYPES.VscodeActionHandler).toService(TYPES.DirtyStateHandler);
         bind(TYPES.VscodeActionHandler).toService(TYPES.DiagnosticsHandler);

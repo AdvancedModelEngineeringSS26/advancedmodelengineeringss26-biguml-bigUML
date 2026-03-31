@@ -37,7 +37,7 @@ export class ActionRouter<TDocument extends vscode.CustomDocument = vscode.Custo
 
         this.emitObservedMessage(message, origin);
 
-        const matchingHandler = this.handlers.find(handler => handler.actionKinds.includes(message.action.kind));
+        const matchingHandler = this.resolveHandler(message.action.kind);
         if (!matchingHandler) {
             return unchangedMessage(message);
         }
@@ -58,5 +58,18 @@ export class ActionRouter<TDocument extends vscode.CustomDocument = vscode.Custo
                 this.actionListener.emitServerAction(message);
                 return;
         }
+    }
+
+    protected resolveHandler(actionKind: string): VscodeActionHandler<TDocument> | undefined {
+        const matchingHandlers = this.handlers.filter(handler => handler.actionKinds.includes(actionKind));
+        if (matchingHandlers.length <= 1) {
+            return matchingHandlers[0];
+        }
+
+        console.warn(
+            `ActionRouter.processMessage found multiple handlers for action kind "${actionKind}". Using the first registered handler.`,
+            matchingHandlers.map(handler => handler.constructor.name)
+        );
+        return matchingHandlers[0];
     }
 }

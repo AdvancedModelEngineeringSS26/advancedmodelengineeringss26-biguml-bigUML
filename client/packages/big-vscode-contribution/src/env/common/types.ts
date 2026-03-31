@@ -14,6 +14,7 @@ export const TYPES = {
     ActionRouter: Symbol('ActionRouter'),
     ActionDispatcher: Symbol('ActionDispatcher'),
     ActionListener: Symbol('ActionListener'),
+    MessageHandler: Symbol('MessageHandler'),
     SelectionTracker: Symbol('SelectionTracker'),
     DirtyStateHandler: Symbol('DirtyStateHandler'),
     DiagnosticsHandler: Symbol('DiagnosticsHandler'),

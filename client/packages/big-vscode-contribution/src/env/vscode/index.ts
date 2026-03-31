@@ -16,6 +16,7 @@ export * from './diagnostics-handler.js';
 export * from './dirty-state-handler.js';
 export * from './document-manager.js';
 export * from './export-handler.js';
+export * from './message-handler.js';
 export * from './navigation-handler.js';
 export * from './progress-handler.js';
 export * from './selection-handler.js';

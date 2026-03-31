@@ -7,31 +7,67 @@
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
 
+import { SetMarkersAction } from '@eclipse-glsp/protocol';
 import type { ActionMessage, GlspVscodeClient } from '@eclipse-glsp/vscode-integration';
-import { injectable } from 'inversify';
+import { inject, injectable } from 'inversify';
 import * as vscode from 'vscode';
 import type { VscodeActionHandler } from '../common/action-handler.js';
 import type { MessageOrigin, MessageProcessingResult } from '../common/message-routing.js';
-import { unchangedMessage } from '../common/message-routing.js';
+import { TYPES } from '../common/types.js';
+import type { ClientManager } from './client-manager.js';
 
 @injectable()
 export class DiagnosticsHandler<TDocument extends vscode.CustomDocument = vscode.CustomDocument>
     implements VscodeActionHandler<TDocument>, vscode.Disposable
 {
-    // Phase 1 scaffold: exact action kind wiring and diagnostics lifecycle move in Phase 4.
-    readonly actionKinds: readonly string[] = [];
+    readonly actionKinds = [SetMarkersAction.KIND] as const;
 
     protected readonly diagnostics = vscode.languages.createDiagnosticCollection();
+    protected readonly disposeListener: vscode.Disposable;
+
+    constructor(@inject(TYPES.ClientManager) protected readonly clientManager: ClientManager<TDocument>) {
+        this.disposeListener = this.clientManager.onDidDispose(client => {
+            this.diagnostics.set(client.document.uri, undefined);
+        });
+    }
 
     handle(
         message: ActionMessage,
-        _client: GlspVscodeClient<TDocument> | undefined,
+        client: GlspVscodeClient<TDocument> | undefined,
         _origin: MessageOrigin
     ): MessageProcessingResult {
-        return unchangedMessage(message);
+        if (!client || !SetMarkersAction.is(message.action)) {
+            return {
+                processedMessage: message,
+                messageChanged: false
+            };
+        }
+
+        const severityMap = new Map<string, vscode.DiagnosticSeverity>([
+            ['info', vscode.DiagnosticSeverity.Information],
+            ['warning', vscode.DiagnosticSeverity.Warning],
+            ['error', vscode.DiagnosticSeverity.Error]
+        ]);
+
+        const diagnostics = message.action.markers.map(
+            marker =>
+                new vscode.Diagnostic(
+                    new vscode.Range(0, 0, 0, 0),
+                    marker.description,
+                    severityMap.get(marker.kind)
+                )
+        );
+
+        this.diagnostics.set(client.document.uri, diagnostics);
+
+        return {
+            processedMessage: message,
+            messageChanged: true
+        };
     }
 
     dispose(): void {
+        this.disposeListener.dispose();
         this.diagnostics.dispose();
     }
 }
