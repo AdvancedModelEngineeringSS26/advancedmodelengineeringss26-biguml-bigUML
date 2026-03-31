@@ -7,25 +7,61 @@
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
 
+import { RedoAction, SetDirtyStateAction, UndoAction } from '@eclipse-glsp/protocol';
 import type { ActionMessage, GlspVscodeClient } from '@eclipse-glsp/vscode-integration';
-import { injectable } from 'inversify';
+import { inject, injectable } from 'inversify';
 import type * as vscode from 'vscode';
 import type { VscodeActionHandler } from '../common/action-handler.js';
 import type { MessageOrigin, MessageProcessingResult } from '../common/message-routing.js';
-import { unchangedMessage } from '../common/message-routing.js';
+import { TYPES } from '../common/types.js';
+import type { ActionDispatcher } from './action-dispatcher.js';
+import type { DocumentManager } from './document-manager.js';
 
 @injectable()
 export class DirtyStateHandler<TDocument extends vscode.CustomDocument = vscode.CustomDocument>
     implements VscodeActionHandler<TDocument>
 {
-    // Phase 1 scaffold: exact action kind wiring and side effects move in Phase 3.
-    readonly actionKinds: readonly string[] = [];
+    readonly actionKinds = [SetDirtyStateAction.KIND] as const;
+
+    constructor(
+        @inject(TYPES.DocumentManager) protected readonly documentManager: DocumentManager<TDocument>,
+        @inject(TYPES.ActionDispatcher) protected readonly actionDispatcher: ActionDispatcher<TDocument>
+    ) {}
 
     handle(
         message: ActionMessage,
-        _client: GlspVscodeClient<TDocument> | undefined,
+        client: GlspVscodeClient<TDocument> | undefined,
         _origin: MessageOrigin
     ): MessageProcessingResult {
-        return unchangedMessage(message);
+        if (!client || !SetDirtyStateAction.is(message.action)) {
+            return {
+                processedMessage: message,
+                messageChanged: true
+            };
+        }
+
+        const { action } = message;
+        const reason = action.reason;
+
+        if (reason === 'save') {
+            this.documentManager.notifyDocumentSaved(client.document);
+        } else if (reason === 'operation' && action.isDirty) {
+            this.documentManager.notifyDocumentEdit({
+                document: client.document,
+                undo: () => {
+                    this.actionDispatcher.dispatch(UndoAction.create(), client.clientId);
+                },
+                redo: () => {
+                    this.actionDispatcher.dispatch(RedoAction.create(), client.clientId);
+                }
+            });
+        } else if (action.isDirty && reason !== 'undo' && reason !== 'redo') {
+            this.documentManager.notifyDocumentChange(client.document);
+        }
+
+        return {
+            processedMessage: message,
+            messageChanged: true
+        };
     }
 }

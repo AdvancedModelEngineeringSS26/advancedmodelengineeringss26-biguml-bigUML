@@ -11,7 +11,8 @@ import type {
     ActionDispatcher as ContributionActionDispatcher,
     ActionListener as ContributionActionListener,
     ActionRouter as ContributionActionRouter,
-    ClientManager as ContributionClientManager
+    ClientManager as ContributionClientManager,
+    DocumentManager as ContributionDocumentManager
 } from '@borkdominik-biguml/big-vscode-contribution/vscode';
 import {
     type Action,
@@ -22,10 +23,7 @@ import {
     GlspVscodeConnector,
     type GlspVscodeServer,
     MessageOrigin,
-    type MessageProcessingResult,
-    RedoAction,
-    type SetDirtyStateAction,
-    UndoAction
+    type MessageProcessingResult
 } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import type * as vscode from 'vscode';
@@ -61,7 +59,9 @@ export class BigGlspVSCodeConnector<
         @inject(CONTRIBUTION_TYPES.ActionRouter)
         protected readonly contributionActionRouter: ContributionActionRouter<TDocument>,
         @inject(CONTRIBUTION_TYPES.ActionDispatcher)
-        protected readonly contributionActionDispatcher: ContributionActionDispatcher<TDocument>
+        protected readonly contributionActionDispatcher: ContributionActionDispatcher<TDocument>,
+        @inject(CONTRIBUTION_TYPES.DocumentManager)
+        protected readonly contributionDocumentManager: ContributionDocumentManager<TDocument>
     ) {
         super({
             server: glspServer,
@@ -111,6 +111,12 @@ export class BigGlspVSCodeConnector<
 
     get onVSCodeActionMessage(): vscode.Event<ActionMessage> {
         return this.contributionActionListener.onVscodeAction;
+    }
+
+    override get onDidChangeCustomDocument():
+        | vscode.Event<vscode.CustomDocumentEditEvent<TDocument>>
+        | vscode.Event<vscode.CustomDocumentContentChangeEvent<TDocument>> {
+        return this.contributionDocumentManager.onDidChangeCustomDocument;
     }
 
     registerVscodeHandledAction(actionKind: string): Disposable {
@@ -181,6 +187,14 @@ export class BigGlspVSCodeConnector<
         });
     }
 
+    override saveDocument(document: TDocument, destination?: vscode.Uri): Promise<void> {
+        return this.contributionDocumentManager.saveDocument(document, destination);
+    }
+
+    override revertDocument(document: TDocument, diagramType: string): Promise<void> {
+        return this.contributionDocumentManager.revertDocument(document, diagramType);
+    }
+
     protected override sendMessageToClient(clientId: string, message: unknown): void {
         const client = this.clientManager.getClient(clientId);
         if (client && ActionMessage.is(message)) {
@@ -202,35 +216,6 @@ export class BigGlspVSCodeConnector<
         } else if (!dispatched) {
             console.warn('Could not dispatch action. No handler found for action kind:', action.kind);
         }
-    }
-
-    protected override handleSetDirtyStateAction(
-        message: ActionMessage<SetDirtyStateAction>,
-        client: GlspVscodeClient<TDocument> | undefined,
-        _origin: MessageOrigin
-    ): MessageProcessingResult {
-        super.handleSetDirtyStateAction(message, client, _origin);
-        if (client) {
-            const reason = message.action.reason || '';
-            if (reason === 'save') {
-                this.onDocumentSavedEmitter.fire(client.document);
-            } else if (message.action.isDirty && message.action.reason === 'operation') {
-                this.onDidChangeCustomDocumentEventEmitter.fire({
-                    document: client.document,
-                    undo: () => {
-                        this.sendActionToClient(client.clientId, UndoAction.create());
-                    },
-                    redo: () => {
-                        this.sendActionToClient(client.clientId, RedoAction.create());
-                    }
-                });
-            }
-        }
-
-        return { processedMessage: message, messageChanged: false };
-        // TODO: Check why
-        // The webview client cannot handle `SetDirtyStateAction`s. Avoid propagation
-        // return { processedMessage: GlspVscodeConnector.NO_PROPAGATION_MESSAGE, messageChanged: true };
     }
 
     protected onClientMessage(_client: GlspVscodeClient<TDocument>, message: unknown): void {
