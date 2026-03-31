@@ -21,16 +21,15 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
         @inject(TYPES.GlspVscodeServer) @optional() protected readonly server?: GlspVscodeServer
     ) {}
 
-    dispatch(actionOrActions: Action | readonly Action[], clientId?: string): void {
+    dispatch(actionOrActions: Action | readonly Action[], clientId?: string): boolean {
         if (Array.isArray(actionOrActions)) {
-            actionOrActions.forEach(currentAction => this.dispatch(currentAction, clientId));
-            return;
+            return actionOrActions.reduce((dispatched, currentAction) => this.dispatch(currentAction, clientId) || dispatched, false);
         }
 
         const client = clientId ? this.clientManager.getClient(clientId) : this.clientManager.activeClient;
         if (!client) {
             console.warn('ActionDispatcher.dispatch skipped: no active or matching client found.', actionOrActions);
-            return;
+            return false;
         }
 
         const action = actionOrActions as Action;
@@ -38,14 +37,19 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
             clientId: client.clientId,
             action
         };
+        let dispatched = false;
 
         if (client.webviewEndpoint.clientActions?.includes(action.kind)) {
             client.webviewEndpoint.sendMessage(message as ActionMessage);
+            dispatched = true;
         }
 
         if (client.webviewEndpoint.serverActions?.includes(action.kind)) {
             this.server?.onSendToServerEmitter.fire(message);
+            dispatched = true;
         }
+
+        return dispatched;
     }
 
     async request<TResponse extends ResponseAction>(

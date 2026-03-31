@@ -31,14 +31,16 @@ export class ClientManager<TDocument extends vscode.CustomDocument = vscode.Cust
         return this.clients.find(client => client.webviewEndpoint.webviewPanel.active);
     }
 
-    register(client: GlspVscodeClient<TDocument>): void {
+    register(client: GlspVscodeClient<TDocument>, options: { managePanelLifecycle?: boolean } = {}): void {
         this.clientsById.set(client.clientId, client);
         this.clientIdsByDocument.set(client.document, client.clientId);
 
-        const panelDisposable = client.webviewEndpoint.webviewPanel.onDidDispose(() => {
-            this.disposeClient(client.clientId);
-        });
-        this.panelDisposables.set(client.clientId, panelDisposable);
+        if (options.managePanelLifecycle !== false) {
+            const panelDisposable = client.webviewEndpoint.webviewPanel.onDidDispose(() => {
+                this.disposeClient(client.clientId);
+            });
+            this.panelDisposables.set(client.clientId, panelDisposable);
+        }
 
         this.onDidRegisterEmitter.fire(client);
     }

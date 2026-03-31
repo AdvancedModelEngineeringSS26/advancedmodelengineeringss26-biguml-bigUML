@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: MIT
  *********************************************************************************/
-import { TYPES, type BigGlspVSCodeConnector, type GlspDiagramSettings } from '@borkdominik-biguml/big-vscode/vscode';
+import { TYPES, type BigGlspVSCodeConnector, type GlspDiagramSettings, type SelectionService } from '@borkdominik-biguml/big-vscode/vscode';
 import { EnableToolsAction, FocusDomAction } from '@borkdominik-biguml/uml-glsp-server';
 import { CenterAction, FitToScreenAction, RequestExportSvgAction, SelectAllAction } from '@eclipse-glsp/protocol';
 import { inject, injectable, postConstruct } from 'inversify';
@@ -18,7 +18,8 @@ export class DefaultCommandsProvider {
     constructor(
         @inject(TYPES.ExtensionContext) protected readonly extensionContext: vscode.ExtensionContext,
         @inject(TYPES.GlspDiagramSettings) protected readonly diagramSettings: GlspDiagramSettings,
-        @inject(TYPES.GlspVSCodeConnector) protected readonly connector: BigGlspVSCodeConnector
+        @inject(TYPES.GlspVSCodeConnector) protected readonly connector: BigGlspVSCodeConnector,
+        @inject(TYPES.SelectionService) protected readonly selectionService: SelectionService
     ) {}
 
     @postConstruct()
@@ -26,7 +27,7 @@ export class DefaultCommandsProvider {
         let selectedElements: string[] = [];
 
         this.extensionContext.subscriptions.push(
-            this.connector.onSelectionUpdate(_selectedElements => (selectedElements = _selectedElements.selectedElementsIDs))
+            this.selectionService.onDidSelectionChange(({ state }) => (selectedElements = [...state.selectedElementsIDs]))
         );
 
         this.extensionContext.subscriptions.push(
@@ -76,8 +77,8 @@ export class DefaultCommandsProvider {
         );
 
         this.extensionContext.subscriptions.push(
-            this.connector.onSelectionUpdate(n => {
-                selectedElements = n.selectedElementsIDs;
+            this.selectionService.onDidSelectionChange(({ state }) => {
+                selectedElements = [...state.selectedElementsIDs];
                 vscode.commands.executeCommand(
                     'setContext',
                     `${this.diagramSettings.name}.editorSelectedElementsAmount`,

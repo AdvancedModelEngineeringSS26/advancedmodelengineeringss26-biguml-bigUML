@@ -7,6 +7,7 @@
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
 
+import { TYPES as CONTRIBUTION_TYPES } from '@borkdominik-biguml/big-vscode-contribution';
 import { TYPES } from '../../vscode-common.types.js';
 import { bindLifecycle } from '../container/bindings.js';
 import { VscodeFeatureModule } from '../container/container.js';
@@ -15,6 +16,9 @@ import { BigGlspVSCodeConnector } from './glsp-vscode-connector.js';
 import { SelectionService } from './selection-service.js';
 
 export const connectorModule = new VscodeFeatureModule(context => {
+    context.bind(CONTRIBUTION_TYPES.GlspVscodeServer).toDynamicValue(bindingContext =>
+        bindingContext.container.get(TYPES.GlspServer)
+    );
     bindLifecycle(context, TYPES.GlspVSCodeConnector, BigGlspVSCodeConnector);
 
     context.bind(TYPES.ConnectionManager).to(ConnectionManager).inSingletonScope();

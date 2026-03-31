@@ -6,6 +6,13 @@
  *
  * SPDX-License-Identifier: MIT
  *********************************************************************************/
+import { TYPES as CONTRIBUTION_TYPES, type MessageOrigin as ContributionMessageOrigin } from '@borkdominik-biguml/big-vscode-contribution';
+import type {
+    ActionDispatcher as ContributionActionDispatcher,
+    ActionListener as ContributionActionListener,
+    ActionRouter as ContributionActionRouter,
+    ClientManager as ContributionClientManager
+} from '@borkdominik-biguml/big-vscode-contribution/vscode';
 import {
     type Action,
     ActionMessage,
@@ -21,7 +28,7 @@ import {
     UndoAction
 } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import { VscodeAction } from '../../../common/vscode.action.js';
 import { TYPES } from '../../vscode-common.types.js';
 
@@ -43,50 +50,26 @@ import { TYPES } from '../../vscode-common.types.js';
 export class BigGlspVSCodeConnector<
     TDocument extends vscode.CustomDocument = vscode.CustomDocument
 > extends GlspVscodeConnector<TDocument> {
-    get documents(): TDocument[] {
-        return Array.from(this.documentMap.keys());
-    }
-
-    get clients(): GlspVscodeClient<TDocument>[] {
-        return Array.from(this.clientMap.values());
-    }
-
-    get activeClient(): GlspVscodeClient<TDocument> | undefined {
-        return this.clients.find(c => c.webviewEndpoint.webviewPanel.active);
-    }
-
-    protected readonly onDidRegisterEmitter = new vscode.EventEmitter<GlspVscodeClient<TDocument>>();
-    readonly onDidRegister = this.onDidRegisterEmitter.event;
-    protected readonly onDidDisposeEmitter = new vscode.EventEmitter<GlspVscodeClient<TDocument>>();
-    readonly onDidDispose = this.onDidDisposeEmitter.event;
-
-    protected readonly onServerActionMessageEmitter = new vscode.EventEmitter<ActionMessage>();
-    readonly onServerActionMessage = this.onServerActionMessageEmitter.event;
-    protected readonly onClientActionMessageEmitter = new vscode.EventEmitter<ActionMessage>();
-    readonly onClientActionMessage = this.onClientActionMessageEmitter.event;
-    protected readonly onVSCodeActionMessageEmitter = new vscode.EventEmitter<ActionMessage>();
-    readonly onVSCodeActionMessage = this.onVSCodeActionMessageEmitter.event;
-
-    /**
-     * Set of actions that are handled by vscode and should not be propagated to the server.
-     * This is a workaround till the java server has been replaced by a node server.
-     */
     protected readonly vscodeHandledActions = new Set<string>();
 
-    constructor(@inject(TYPES.GlspServer) glspServer: GlspVscodeServer) {
+    constructor(
+        @inject(TYPES.GlspServer) glspServer: GlspVscodeServer,
+        @inject(CONTRIBUTION_TYPES.ClientManager)
+        protected readonly clientManager: ContributionClientManager<TDocument>,
+        @inject(CONTRIBUTION_TYPES.ActionListener)
+        protected readonly contributionActionListener: ContributionActionListener,
+        @inject(CONTRIBUTION_TYPES.ActionRouter)
+        protected readonly contributionActionRouter: ContributionActionRouter<TDocument>,
+        @inject(CONTRIBUTION_TYPES.ActionDispatcher)
+        protected readonly contributionActionDispatcher: ContributionActionDispatcher<TDocument>
+    ) {
         super({
             server: glspServer,
             logging: false,
             onBeforeReceiveMessageFromServer: (message, callback) => {
-                if (ActionMessage.is(message)) {
-                    this.onServerActionMessageEmitter.fire(message);
-                }
                 callback(message);
             },
             onBeforeReceiveMessageFromClient: (message, callback) => {
-                if (ActionMessage.is(message)) {
-                    this.onClientActionMessageEmitter.fire(message);
-                }
                 callback(message);
             },
             onBeforePropagateMessageToClient: (_originalMessage, processedMessage, _messageChanged) => {
@@ -98,6 +81,38 @@ export class BigGlspVSCodeConnector<
         });
     }
 
+    get documents(): TDocument[] {
+        return this.clients.map(client => client.document);
+    }
+
+    get clients(): GlspVscodeClient<TDocument>[] {
+        return [...this.clientManager.clients];
+    }
+
+    get activeClient(): GlspVscodeClient<TDocument> | undefined {
+        return this.clientManager.activeClient;
+    }
+
+    get onDidRegister(): vscode.Event<GlspVscodeClient<TDocument>> {
+        return this.clientManager.onDidRegister;
+    }
+
+    get onDidDispose(): vscode.Event<GlspVscodeClient<TDocument>> {
+        return this.clientManager.onDidDispose;
+    }
+
+    get onServerActionMessage(): vscode.Event<ActionMessage> {
+        return this.contributionActionListener.onServerAction;
+    }
+
+    get onClientActionMessage(): vscode.Event<ActionMessage> {
+        return this.contributionActionListener.onClientAction;
+    }
+
+    get onVSCodeActionMessage(): vscode.Event<ActionMessage> {
+        return this.contributionActionListener.onVscodeAction;
+    }
+
     registerVscodeHandledAction(actionKind: string): Disposable {
         this.vscodeHandledActions.add(actionKind);
         return Disposable.create(() => {
@@ -106,7 +121,7 @@ export class BigGlspVSCodeConnector<
     }
 
     clientIdByDocument(document: TDocument): string | undefined {
-        return this.documentMap.get(document);
+        return this.clientManager.getClientId(document);
     }
 
     public override async registerClient(client: GlspVscodeClient<TDocument>): Promise<void> {
@@ -123,6 +138,7 @@ export class BigGlspVSCodeConnector<
         this.clientMap.set(client.clientId, client);
         this.documentMap.set(client.document, client.clientId);
         this.clientProgressMap.set(client.clientId, new Map());
+        this.clientManager.register(client, { managePanelLifecycle: false });
 
         // Cleanup when client panel is closed
         const panelOnDisposeListener = client.webviewEndpoint.webviewPanel.onDidDispose(async () => {
@@ -136,8 +152,6 @@ export class BigGlspVSCodeConnector<
             })
         );
 
-        this.onDidRegisterEmitter.fire(client);
-
         // Initialize glsp client
         const glspClient = await this.options.server.glspClient;
         toDispose.push(client.webviewEndpoint.initialize(glspClient));
@@ -149,7 +163,7 @@ export class BigGlspVSCodeConnector<
     }
 
     public sendActionToActiveServer(action: Action): void {
-        this.clientMap.forEach(client => {
+        this.clients.forEach(client => {
             if (client.webviewEndpoint.webviewPanel.active) {
                 const message = {
                     clientId: client.clientId,
@@ -168,31 +182,23 @@ export class BigGlspVSCodeConnector<
     }
 
     protected override sendMessageToClient(clientId: string, message: unknown): void {
-        const client = this.clientMap.get(clientId);
+        const client = this.clientManager.getClient(clientId);
         if (client && ActionMessage.is(message)) {
             client.webviewEndpoint.sendMessage(message);
         }
     }
 
     override dispatchAction(action: Action, clientId?: string): void {
-        const client = clientId ? this.clientMap.get(clientId) : this.getActiveClient();
+        const client = clientId ? this.clientManager.getClient(clientId) : this.activeClient;
         if (!client) {
             console.warn('Could not dispatch action: No client found for clientId or no active client found.', action);
             return;
         }
         const message = { clientId: client.clientId, action };
-        let dispatched = false;
-        if (client.webviewEndpoint.clientActions?.includes(action.kind)) {
-            client.webviewEndpoint.sendMessage(message);
-            dispatched = true;
-        }
-        if (client.webviewEndpoint.serverActions?.includes(action.kind)) {
-            this.options.server.onSendToServerEmitter.fire(message);
-            dispatched = true;
-        }
+        const dispatched = this.contributionActionDispatcher.dispatch(action, client.clientId);
 
         if (!dispatched && this.vscodeHandledActions.has(action.kind)) {
-            this.onVSCodeActionMessageEmitter.fire(message);
+            this.contributionActionListener.emitVscodeAction(message);
         } else if (!dispatched) {
             console.warn('Could not dispatch action. No handler found for action kind:', action.kind);
         }
@@ -251,6 +257,12 @@ export class BigGlspVSCodeConnector<
     }
 
     protected override processMessage(message: unknown, origin: MessageOrigin): MessageProcessingResult {
+        const client = ActionMessage.is(message) ? this.clientManager.getClient(message.clientId) : undefined;
+        const composed = this.contributionActionRouter.processMessage(message, client, this.toContributionOrigin(origin));
+        if (composed.messageChanged) {
+            return composed;
+        }
+
         const processed = super.processMessage(message, origin);
 
         if (processed.messageChanged) {
@@ -272,12 +284,16 @@ export class BigGlspVSCodeConnector<
 
     protected onClientDispose(client: GlspVscodeClient<TDocument>, disposables: vscode.Disposable[]): void {
         disposables.forEach(disposable => disposable.dispose());
-        this.onDidDisposeEmitter.fire(client);
+        this.clientManager.disposeClient(client.clientId);
     }
 
     protected disposeClientSessionArgs(client: GlspVscodeClient<TDocument>): Args | undefined {
         return {
             ['sourceUri']: client.document.uri.path
         };
+    }
+
+    protected toContributionOrigin(origin: MessageOrigin): ContributionMessageOrigin {
+        return origin === MessageOrigin.CLIENT ? 'client' : 'server';
     }
 }
