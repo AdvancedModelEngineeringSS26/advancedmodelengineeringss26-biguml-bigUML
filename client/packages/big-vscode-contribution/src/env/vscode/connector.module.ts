@@ -11,7 +11,7 @@ import type { GlspVscodeServer } from '@eclipse-glsp/vscode-integration';
 import { ContainerModule } from 'inversify';
 import { TYPES } from '../common/types.js';
 import { ActionDispatcher } from './action-dispatcher.js';
-import { ActionListener } from './action-listener.js';
+import { ActionListener, ActionRequestHandlerRegistry } from './action-listener.js';
 import { ActionRouter } from './action-router.js';
 import { ClientManager } from './client-manager.js';
 import { DiagnosticsHandler } from './diagnostics-handler.js';
@@ -40,6 +40,7 @@ export function createVscodeContributionModule(options: VscodeContributionModule
         bind(TYPES.ActionListener).to(ActionListener).inSingletonScope();
         bind(TYPES.ActionRouter).to(ActionRouter).inSingletonScope();
         bind(TYPES.ActionDispatcher).to(ActionDispatcher).inSingletonScope();
+        bind(ActionRequestHandlerRegistry).toSelf().inSingletonScope();
         bind(TYPES.SelectionTracker).to(SelectionTracker).inSingletonScope();
         bind(TYPES.DocumentManager).to(DocumentManager).inSingletonScope();
         bind(TYPES.WebviewEndpointFactory).to(DefaultWebviewEndpointFactory).inSingletonScope();

@@ -10,13 +10,13 @@
 import {
     type Action,
     type ActionMessage,
-    Deferred,
     type Disposable,
-    DisposableCollection,
     RequestAction,
     ResponseAction
 } from '@eclipse-glsp/vscode-integration';
-import { inject, injectable, postConstruct, preDestroy } from 'inversify';
+import { inject, injectable } from 'inversify';
+import type { ActionDispatcher as ContributionActionDispatcher } from '@borkdominik-biguml/big-vscode-contribution/vscode';
+import { TYPES as CONTRIBUTION_TYPES } from '@borkdominik-biguml/big-vscode-contribution';
 import { VscodeAction } from '../../../common/vscode.action.js';
 import { TYPES } from '../../vscode-common.types.js';
 import type { BigGlspVSCodeConnector } from '../connector/glsp-vscode-connector.js';
@@ -29,36 +29,8 @@ import type { BigGlspVSCodeConnector } from '../connector/glsp-vscode-connector.
 export class ActionDispatcher implements Disposable {
     @inject(TYPES.GlspVSCodeConnector)
     protected readonly connector: BigGlspVSCodeConnector;
-
-    protected readonly requests: Map<string, Deferred<ActionMessage>> = new Map();
-    protected toDispose = new DisposableCollection();
-
-    @postConstruct()
-    protected init(): void {
-        this.toDispose.push(
-            this.connector.onClientActionMessage(message => {
-                this.onActionMessage(message);
-            }),
-            this.connector.onServerActionMessage(message => {
-                this.onActionMessage(message);
-            })
-        );
-    }
-
-    protected onActionMessage(message: ActionMessage): void {
-        if (ResponseAction.is(message.action)) {
-            const deferred = this.requests.get(message.action.responseId);
-            if (deferred) {
-                this.requests.delete(message.action.responseId);
-                deferred.resolve(message);
-            }
-        }
-    }
-
-    @preDestroy()
-    dispose(): void {
-        this.toDispose.dispose();
-    }
+    @inject(CONTRIBUTION_TYPES.ActionDispatcher)
+    protected readonly contributionActionDispatcher: ContributionActionDispatcher;
 
     /**
      * Dispatches a request action to the GLSP client (server) and returns a promise that resolves with the response action.
@@ -68,10 +40,7 @@ export class ActionDispatcher implements Disposable {
             action.requestId = RequestAction.generateRequestId();
         }
         action.requestId = VscodeAction.prefixRequestId(action.requestId);
-        const deferred = new Deferred<ActionMessage<Res>>();
-        this.requests.set(action.requestId, deferred as any);
-        this.dispatch(action);
-        return deferred.promise;
+        return this.contributionActionDispatcher.request(action);
     }
 
     /**
@@ -87,11 +56,7 @@ export class ActionDispatcher implements Disposable {
      * This method will not wait for a response.
      */
     dispatchToClient(clientId: string | undefined, action: Action | Action[]): void {
-        if (Array.isArray(action)) {
-            action.forEach(a => this.connector.dispatchAction(a, clientId));
-        } else {
-            this.connector.dispatchAction(action, clientId);
-        }
+        this.contributionActionDispatcher.dispatch(action, clientId);
     }
 
     /**
@@ -105,5 +70,9 @@ export class ActionDispatcher implements Disposable {
                 action: action
             });
         });
+    }
+
+    dispose(): void {
+        // Delegated state is owned by the contribution action dispatcher.
     }
 }

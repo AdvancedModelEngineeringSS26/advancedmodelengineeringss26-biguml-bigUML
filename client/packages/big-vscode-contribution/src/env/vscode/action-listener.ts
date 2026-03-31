@@ -7,9 +7,11 @@
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
 
-import type { ActionMessage } from '@eclipse-glsp/vscode-integration';
-import { injectable } from 'inversify';
+import { Disposable, DisposableCollection, type ActionMessage, type MaybePromise, type RequestAction, type ResponseAction } from '@eclipse-glsp/vscode-integration';
+import { inject, injectable } from 'inversify';
 import * as vscode from 'vscode';
+import { TYPES } from '../common/types.js';
+import type { ActionDispatcher } from './action-dispatcher.js';
 
 @injectable()
 export class ActionListener implements vscode.Disposable {
@@ -34,9 +36,103 @@ export class ActionListener implements vscode.Disposable {
         this.onVscodeActionEmitter.fire(message);
     }
 
+    registerListener(callback: (action: ActionMessage) => void): Disposable {
+        return this.onClientAction(callback);
+    }
+
+    registerServerListener(callback: (action: ActionMessage) => void): Disposable {
+        return this.onServerAction(callback);
+    }
+
+    registerVSCodeListener(callback: (action: ActionMessage) => void): Disposable {
+        return this.onVscodeAction(callback);
+    }
+
+    createCache(cachedActionKinds: string[]): CacheActionListener {
+        return new CacheActionListener(this, cachedActionKinds);
+    }
+
     dispose(): void {
         this.onClientActionEmitter.dispose();
         this.onServerActionEmitter.dispose();
         this.onVscodeActionEmitter.dispose();
+    }
+}
+
+@injectable()
+export class ActionRequestHandlerRegistry implements vscode.Disposable {
+    protected readonly toDispose = new DisposableCollection();
+
+    constructor(
+        @inject(TYPES.ActionListener) protected readonly actionListener: ActionListener,
+        @inject(TYPES.ActionDispatcher) protected readonly actionDispatcher: ActionDispatcher
+    ) {}
+
+    handleGLSPRequest<TRequest extends RequestAction<ResponseAction>, TResponse extends ResponseAction = ResponseAction>(
+        kind: TRequest['kind'],
+        handler: (action: ActionMessage<TRequest>) => MaybePromise<TResponse>
+    ): Disposable {
+        return this.actionListener.registerListener(message => {
+            if (message.action.kind === kind) {
+                void this.dispatchHandledResponse(handler, message as ActionMessage<TRequest>);
+            }
+        });
+    }
+
+    handleVSCodeRequest<TRequest extends RequestAction<ResponseAction>, TResponse extends ResponseAction = ResponseAction>(
+        kind: TRequest['kind'],
+        handler: (action: ActionMessage<TRequest>) => MaybePromise<TResponse>
+    ): Disposable {
+        return this.actionListener.registerVSCodeListener(message => {
+            if (message.action.kind === kind) {
+                void this.dispatchHandledResponse(handler, message as ActionMessage<TRequest>);
+            }
+        });
+    }
+
+    dispose(): void {
+        this.toDispose.dispose();
+    }
+
+    protected async dispatchHandledResponse<TRequest extends RequestAction<ResponseAction>, TResponse extends ResponseAction>(
+        handler: (action: ActionMessage<TRequest>) => MaybePromise<TResponse>,
+        message: ActionMessage<TRequest>
+    ): Promise<void> {
+        const response = await handler(message);
+        this.actionDispatcher.dispatch(response, message.clientId);
+    }
+}
+
+export class CacheActionListener implements vscode.Disposable {
+    protected readonly toDispose = new DisposableCollection();
+    protected readonly cache: Record<string, ActionMessage> = {};
+
+    protected readonly onDidChangeEmitter = new vscode.EventEmitter<ActionMessage>();
+    readonly onDidChange = this.onDidChangeEmitter.event;
+
+    constructor(
+        protected readonly actionListener: ActionListener,
+        protected readonly cachedActionKinds: string[]
+    ) {
+        this.toDispose.push(
+            this.actionListener.registerListener(message => {
+                if (this.cachedActionKinds.includes(message.action.kind)) {
+                    this.cache[message.action.kind] = message;
+                    this.onDidChangeEmitter.fire(message);
+                }
+            })
+        );
+    }
+
+    getAction(kind: string): ActionMessage | undefined {
+        return this.cache[kind];
+    }
+
+    getActions(): ActionMessage[] {
+        return Object.values(this.cache);
+    }
+
+    dispose(): void {
+        this.toDispose.dispose();
     }
 }

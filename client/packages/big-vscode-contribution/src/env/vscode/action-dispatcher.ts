@@ -7,19 +7,29 @@
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
 
-import type { Action, RequestAction, ResponseAction } from '@eclipse-glsp/protocol';
-import type { ActionMessage, GlspVscodeServer } from '@eclipse-glsp/vscode-integration';
+import { RequestAction, ResponseAction, type Action } from '@eclipse-glsp/protocol';
+import { Deferred, DisposableCollection, type ActionMessage, type GlspVscodeServer } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable, optional } from 'inversify';
 import type * as vscode from 'vscode';
 import { TYPES } from '../common/types.js';
 import type { ClientManager } from './client-manager.js';
+import type { ActionListener } from './action-listener.js';
 
 @injectable()
-export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.CustomDocument> {
+export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.CustomDocument> implements vscode.Disposable {
+    protected readonly requests = new Map<string, Deferred<ActionMessage<any>>>();
+    protected readonly toDispose = new DisposableCollection();
+
     constructor(
         @inject(TYPES.ClientManager) protected readonly clientManager: ClientManager<TDocument>,
+        @inject(TYPES.ActionListener) protected readonly actionListener: ActionListener,
         @inject(TYPES.GlspVscodeServer) @optional() protected readonly server?: GlspVscodeServer
-    ) {}
+    ) {
+        this.toDispose.push(
+            this.actionListener.onClientAction(message => this.onActionMessage(message)),
+            this.actionListener.onServerAction(message => this.onActionMessage(message))
+        );
+    }
 
     dispatch(actionOrActions: Action | readonly Action[], clientId?: string): boolean {
         if (Array.isArray(actionOrActions)) {
@@ -54,8 +64,38 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
 
     async request<TResponse extends ResponseAction>(
         action: RequestAction<TResponse>,
-        _clientId?: string
+        clientId?: string
     ): Promise<ActionMessage<TResponse>> {
-        throw new Error(`ActionDispatcher.request is not implemented yet for action kind: ${action.kind}`);
+        if (!action.requestId || action.requestId === '') {
+            action.requestId = RequestAction.generateRequestId();
+        }
+
+        const deferred = new Deferred<ActionMessage<TResponse>>();
+        this.requests.set(action.requestId, deferred as unknown as Deferred<ActionMessage<any>>);
+
+        const dispatched = this.dispatch(action, clientId);
+        if (!dispatched) {
+            this.requests.delete(action.requestId);
+            throw new Error(`ActionDispatcher.request failed: could not dispatch request action ${action.kind}.`);
+        }
+
+        return deferred.promise;
+    }
+
+    dispose(): void {
+        this.toDispose.dispose();
+        this.requests.clear();
+    }
+
+    protected onActionMessage(message: ActionMessage): void {
+        if (!ResponseAction.is(message.action)) {
+            return;
+        }
+
+        const deferred = this.requests.get(message.action.responseId);
+        if (deferred) {
+            this.requests.delete(message.action.responseId);
+            deferred.resolve(message);
+        }
     }
 }
