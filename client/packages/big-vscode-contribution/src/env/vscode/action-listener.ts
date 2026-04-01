@@ -7,7 +7,14 @@
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
 
-import { Disposable, DisposableCollection, type ActionMessage, type MaybePromise, type RequestAction, type ResponseAction } from '@eclipse-glsp/vscode-integration';
+import {
+    DisposableCollection,
+    type ActionMessage,
+    type Disposable,
+    type MaybePromise,
+    type RequestAction,
+    type ResponseAction
+} from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import * as vscode from 'vscode';
 import { TYPES } from '../common/types.js';

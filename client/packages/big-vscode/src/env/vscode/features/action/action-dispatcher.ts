@@ -7,16 +7,10 @@
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
 
-import {
-    type Action,
-    type ActionMessage,
-    type Disposable,
-    RequestAction,
-    ResponseAction
-} from '@eclipse-glsp/vscode-integration';
-import { inject, injectable } from 'inversify';
-import type { ActionDispatcher as ContributionActionDispatcher } from '@borkdominik-biguml/big-vscode-contribution/vscode';
 import { TYPES as CONTRIBUTION_TYPES } from '@borkdominik-biguml/big-vscode-contribution';
+import type { ActionDispatcher as ContributionActionDispatcher } from '@borkdominik-biguml/big-vscode-contribution/vscode';
+import { type Action, type ActionMessage, type Disposable, RequestAction, type ResponseAction } from '@eclipse-glsp/vscode-integration';
+import { inject, injectable } from 'inversify';
 import { VscodeAction } from '../../../common/vscode.action.js';
 import { TYPES } from '../../vscode-common.types.js';
 import type { BigGlspVSCodeConnector } from '../connector/glsp-vscode-connector.js';

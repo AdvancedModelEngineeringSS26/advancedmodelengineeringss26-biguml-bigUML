@@ -8,16 +8,20 @@
  **********************************************************************************/
 
 import { TYPES as CONTRIBUTION_TYPES } from '@borkdominik-biguml/big-vscode-contribution';
+import type { ActionListener as ContributionActionListener } from '@borkdominik-biguml/big-vscode-contribution/vscode';
 import {
     ActionRequestHandlerRegistry as ContributionActionRequestHandlerRegistry,
-    CacheActionListener as ContributionCacheActionListener
-} from '@borkdominik-biguml/big-vscode-contribution/vscode';
-import type {
-    ActionListener as ContributionActionListener,
-    
+    type CacheActionListener as ContributionCacheActionListener
 } from '@borkdominik-biguml/big-vscode-contribution/vscode';
 import type { InferResponseType } from '@borkdominik-biguml/uml-glsp-server';
-import { Disposable, DisposableCollection, type ActionMessage, type MaybePromise, type RequestAction, type ResponseAction } from '@eclipse-glsp/vscode-integration';
+import {
+    DisposableCollection,
+    type ActionMessage,
+    type Disposable,
+    type MaybePromise,
+    type RequestAction,
+    type ResponseAction
+} from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import { TYPES } from '../../vscode-common.types.js';
 import type { BigGlspVSCodeConnector } from '../connector/glsp-vscode-connector.js';
@@ -60,7 +64,10 @@ export class ActionListener implements Disposable {
         const toDispose = new DisposableCollection();
         toDispose.push(
             this.connector.registerVscodeHandledAction(kind),
-            this.requestHandlerRegistry.handleGLSPRequest(kind, handler as (action: ActionMessage<TRequest>) => MaybePromise<ResponseAction>)
+            this.requestHandlerRegistry.handleGLSPRequest(
+                kind,
+                handler as (action: ActionMessage<TRequest>) => MaybePromise<ResponseAction>
+            )
         );
         return toDispose;
     }
@@ -72,7 +79,10 @@ export class ActionListener implements Disposable {
         const toDispose = new DisposableCollection();
         toDispose.push(
             this.connector.registerVscodeHandledAction(kind),
-            this.requestHandlerRegistry.handleVSCodeRequest(kind, handler as (action: ActionMessage<TRequest>) => MaybePromise<ResponseAction>)
+            this.requestHandlerRegistry.handleVSCodeRequest(
+                kind,
+                handler as (action: ActionMessage<TRequest>) => MaybePromise<ResponseAction>
+            )
         );
         return toDispose;
     }
