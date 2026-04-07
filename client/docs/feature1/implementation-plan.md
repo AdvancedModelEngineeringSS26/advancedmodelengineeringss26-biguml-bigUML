@@ -420,6 +420,33 @@ Remove compatibility debt that is no longer justified and run the full verificat
 - The extension passes the full verification matrix after cleanup.
 - Feature 1 can be closed against the assignment requirements, not just against the migration history.
 
+### Intentionally Retained Compatibility Surface After Phase 9
+
+The final runtime ownership stays in `big-vscode-contribution`, but `big-vscode`
+still intentionally retains a thin compatibility layer for existing extension
+packages that resolve services through the `big-vscode` DI symbols.
+
+Retained top-level service identifiers:
+
+- `TYPES.GlspVSCodeConnector`
+- `TYPES.ActionDispatcher`
+- `TYPES.ActionListener`
+- `TYPES.ConnectionManager`
+- `TYPES.SelectionService`
+
+Retained deprecated connector helper members for out-of-scope first-party
+consumers:
+
+- `sendActionToActiveClient(...)`
+- `sendActionToActiveServer(...)`
+- `sendActionToServer(...)`
+- `onClientActionMessage`
+- `onServerActionMessage`
+- `onVSCodeActionMessage`
+
+These members should not be used by new code. New runtime behavior should bind
+to the action services in `big-vscode` or directly to contribution services.
+
 ### Manual Testing Steps
 
 1. Repeat the full smoke test matrix from Phases 2 through 8.

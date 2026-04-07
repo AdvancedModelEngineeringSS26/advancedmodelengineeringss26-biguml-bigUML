@@ -54,14 +54,14 @@ export class BigVscodeMessagePropagationFilter {
 }
 
 /**
- * Temporary compatibility facade for the existing `big-vscode` service surface.
+ * Compatibility facade for the retained `big-vscode` connector surface.
  *
- * This facade remains only to preserve the public API expected by the
- * rest of the extension until the wrapper layer is removed in a later phase.
+ * Runtime ownership lives in `big-vscode-contribution`. This class only keeps
+ * the API that existing packages still resolve through `TYPES.GlspVSCodeConnector`
+ * plus a small set of deprecated action-helper members for out-of-scope consumers.
  */
 @injectable()
 export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vscode.CustomDocument> implements vscode.Disposable {
-    protected readonly vscodeHandledActions = new Set<string>();
     readonly messenger = new Messenger({ ignoreHiddenViews: false });
 
     constructor(
@@ -96,14 +96,23 @@ export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vs
         return this.contributionConnector.onDidDispose;
     }
 
+    /**
+     * @deprecated Prefer `TYPES.ActionListener` instead.
+     */
     get onServerActionMessage(): vscode.Event<any> {
         return this.contributionActionListener.onServerAction;
     }
 
+    /**
+     * @deprecated Prefer `TYPES.ActionListener` instead.
+     */
     get onClientActionMessage(): vscode.Event<any> {
         return this.contributionActionListener.onClientAction;
     }
 
+    /**
+     * @deprecated Prefer `TYPES.ActionListener` instead.
+     */
     get onVSCodeActionMessage(): vscode.Event<any> {
         return this.contributionActionListener.onVscodeAction;
     }
@@ -112,15 +121,6 @@ export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vs
         | vscode.Event<vscode.CustomDocumentEditEvent<TDocument>>
         | vscode.Event<vscode.CustomDocumentContentChangeEvent<TDocument>> {
         return this.contributionConnector.onDidChangeCustomDocument;
-    }
-
-    registerVscodeHandledAction(actionKind: string): Disposable {
-        this.vscodeHandledActions.add(actionKind);
-        const registryDisposable = this.handledActions.register(actionKind);
-        return Disposable.create(() => {
-            this.vscodeHandledActions.delete(actionKind);
-            registryDisposable.dispose();
-        });
     }
 
     clientIdByDocument(document: TDocument): string | undefined {
@@ -133,10 +133,16 @@ export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vs
         });
     }
 
+    /**
+     * @deprecated Prefer `TYPES.ActionDispatcher` instead.
+     */
     sendActionToActiveClient(action: Action): void {
         this.dispatchAction(action);
     }
 
+    /**
+     * @deprecated Prefer `TYPES.ActionDispatcher` instead.
+     */
     public sendActionToActiveServer(action: Action): void {
         this.clients.forEach(client => {
             if (client.webviewEndpoint.webviewPanel.active) {
@@ -148,6 +154,9 @@ export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vs
         });
     }
 
+    /**
+     * @deprecated Prefer `TYPES.ActionDispatcher` instead.
+     */
     public sendActionToServer(clientId: string, action: Action): void {
         this.glspServer.onSendToServerEmitter.fire({
             clientId,
@@ -163,7 +172,7 @@ export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vs
         }
 
         const dispatched = this.contributionConnector.dispatchAction(action, client.clientId);
-        if (!dispatched && this.vscodeHandledActions.has(action.kind)) {
+        if (!dispatched && this.handledActions.has(action.kind)) {
             this.contributionActionListener.emitVscodeAction({
                 clientId: client.clientId,
                 action
@@ -182,12 +191,7 @@ export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vs
     }
 
     dispose(): void {
-        this.vscodeHandledActions.clear();
         this.contributionConnector.dispose();
-    }
-
-    isVscodeHandledAction(actionKind: string): boolean {
-        return this.vscodeHandledActions.has(actionKind);
     }
 
     protected disposeClientSessionArgs(client: GlspVscodeClient<TDocument>): Args | undefined {

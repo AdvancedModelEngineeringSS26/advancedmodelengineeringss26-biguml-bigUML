@@ -1,4 +1,4 @@
-# Manual UI Verification Guide for Feature 1 Phases 1-7
+# Manual UI Verification Guide for Feature 1 Phases 1-9
 
 This guide turns the phase requirements from `client/docs/feature1/implementation-plan.md` into concrete UI checks in the VS Code extension.
 
@@ -15,6 +15,8 @@ Use this guide for:
 - Phase 5: Endpoint factory and editor migration
 - Phase 6: Runtime connector cutover
 - Phase 7: Contribution-native custom action migration
+- Phase 8: Endpoint API cleanup and compatibility reduction
+- Phase 9: Final architecture cleanup and verification
 
 ## Known limitations in the current repo
 
@@ -316,6 +318,49 @@ Pass if:
 
 - request/response flows remain tied to the correct active editor
 - actions from one diagram do not leak into another diagram's UI state
+
+## Phase 8: Endpoint API Cleanup and Compatibility Reduction
+
+Goal: confirm that the generic endpoint contract is sufficient on its own and
+that reload-safe behavior still works without a UML-specific adapter.
+
+1. Open `asd.uml`.
+2. Confirm the editor loads and renders.
+3. Open `class_1768132987976.uml` in a second editor.
+4. Confirm both editors render and stay isolated when switching focus.
+5. Run `Developer: Reload Window`.
+6. After reload, reopen the two UML editors if they were not restored automatically.
+7. Confirm both editors reconnect and render again.
+8. Select elements in both editors and confirm `Properties`, `Minimap`, and `Diagram Outline` still follow the active editor.
+9. If you have theme switching enabled, switch the VS Code theme once.
+10. Confirm the diagram stays usable and the theme-dependent styling still updates.
+
+Pass if:
+
+- reload-safe endpoint initialization still works
+- multiple editors remain isolated
+- post-ready behavior such as theme updates still runs
+
+## Phase 9: Final Architecture Cleanup and Verification
+
+Goal: validate the final runtime after removing unnecessary compatibility code
+and retaining only the documented `big-vscode` compatibility surface.
+
+1. Repeat the baseline smoke check.
+2. Open `asd.uml` and `class_1768132987976.uml` side by side.
+3. Repeat the multi-editor selection and focus checks from Phases 2 and 6.
+4. Repeat the save, undo/redo, and revert checks from Phase 3.
+5. Repeat the diagnostics and SVG export checks from Phase 4.
+6. Repeat the reload and reconnection checks from Phase 8.
+7. Repeat the code-generation and timeline request/response checks from Phase 7.
+8. Record whether progress and external navigation were fully verified or remain without a stable UI trigger in the current repo.
+9. Record any remaining retained compatibility surface that is still required by first-party packages.
+
+Pass if:
+
+- the full regression matrix passes after the cleanup
+- there is no stale editor, selection, or request-routing state
+- the remaining compatibility surface is explicit and small
 
 ## Suggested evidence to capture
 

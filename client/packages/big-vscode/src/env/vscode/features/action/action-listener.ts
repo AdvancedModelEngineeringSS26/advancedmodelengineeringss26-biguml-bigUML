@@ -23,23 +23,23 @@ import {
     type ResponseAction
 } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
-import { TYPES } from '../../vscode-common.types.js';
-import type { BigGlspVSCodeConnector } from '../connector/glsp-vscode-connector.js';
+import { VscodeHandledActionRegistry } from '../connector/glsp-vscode-connector.js';
 
 /**
  * Compatibility adapter over the contribution-native action listener services.
  *
- * Phase 7 keeps the `big-vscode` API stable while moving request handling and
- * observation ownership into `big-vscode-contribution`.
+ * `big-vscode` retains this wrapper so existing packages can keep resolving
+ * `TYPES.ActionListener` while request handling and action observation are owned
+ * by `big-vscode-contribution`.
  */
 @injectable()
 export class ActionListener implements Disposable {
-    @inject(TYPES.GlspVSCodeConnector)
-    protected readonly connector: BigGlspVSCodeConnector;
     @inject(CONTRIBUTION_TYPES.ActionListener)
     protected readonly contributionActionListener: ContributionActionListener;
     @inject(ContributionActionRequestHandlerRegistry)
     protected readonly requestHandlerRegistry: ContributionActionRequestHandlerRegistry;
+    @inject(VscodeHandledActionRegistry)
+    protected readonly vscodeHandledActionRegistry: VscodeHandledActionRegistry;
 
     dispose(): void {
         // Delegated state is owned by contribution services.
@@ -63,7 +63,7 @@ export class ActionListener implements Disposable {
     ): Disposable {
         const toDispose = new DisposableCollection();
         toDispose.push(
-            this.connector.registerVscodeHandledAction(kind),
+            this.vscodeHandledActionRegistry.register(kind),
             this.requestHandlerRegistry.handleGLSPRequest(
                 kind,
                 handler as (action: ActionMessage<TRequest>) => MaybePromise<ResponseAction>
@@ -78,7 +78,7 @@ export class ActionListener implements Disposable {
     ): Disposable {
         const toDispose = new DisposableCollection();
         toDispose.push(
-            this.connector.registerVscodeHandledAction(kind),
+            this.vscodeHandledActionRegistry.register(kind),
             this.requestHandlerRegistry.handleVSCodeRequest(
                 kind,
                 handler as (action: ActionMessage<TRequest>) => MaybePromise<ResponseAction>
