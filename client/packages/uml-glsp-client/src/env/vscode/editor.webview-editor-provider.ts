@@ -9,11 +9,7 @@
 import { TYPES as CONTRIBUTION_TYPES } from '@borkdominik-biguml/big-vscode-contribution';
 import type { WebviewEndpointFactory as ContributionWebviewEndpointFactory } from '@borkdominik-biguml/big-vscode-contribution';
 import { ReactHtmlProvider, TYPES, WebviewEditorProvider } from '@borkdominik-biguml/big-vscode/vscode';
-import {
-    type GLSPDiagramIdentifier,
-    type GlspVscodeClient,
-    type WebviewEndpoint
-} from '@eclipse-glsp/vscode-integration';
+import { type GLSPDiagramIdentifier, type GlspVscodeClient } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import {
     type CancellationToken,
@@ -29,7 +25,6 @@ import {
 } from 'vscode';
 import { GLSPIsReadyAction } from '../common/actions/editor.actions.js';
 import type { ThemeIntegration } from './features/theme/theme-integration.js';
-import { UmlWebviewEndpointAdapter } from './uml-webview-endpoint-adapter.js';
 
 export const UmlDiagramEditorSettings = Symbol('UmlDiagramEditorSettings');
 export interface UmlDiagramEditorSettings {
@@ -120,19 +115,17 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
             clientId
         };
 
-        const endpoint = new UmlWebviewEndpointAdapter(
-            this.webviewEndpointFactory.create({
-                diagramIdentifier,
-                messenger: this.connector.messenger,
-                webviewPanel
-            })
-        );
+        const endpoint = this.webviewEndpointFactory.create({
+            diagramIdentifier,
+            messenger: this.connector.messenger,
+            webviewPanel
+        });
 
         const client: GlspVscodeClient = {
             clientId: diagramIdentifier.clientId,
             diagramType: diagramIdentifier.diagramType,
             document,
-            webviewEndpoint: endpoint as unknown as WebviewEndpoint
+            webviewEndpoint: endpoint
         };
 
         endpoint.onActionMessage(m => {

@@ -7,19 +7,9 @@
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
 
-import type { ActionMessage, Disposable, GLSPClient, WebviewEndpointOptions } from '@eclipse-glsp/vscode-integration';
-import type * as vscode from 'vscode';
+import type { Disposable, WebviewEndpoint, WebviewEndpointOptions } from '@eclipse-glsp/vscode-integration';
 
-export interface VscodeWebviewEndpoint {
-    readonly webviewPanel: vscode.WebviewPanel;
-    readonly serverActions?: readonly string[];
-    readonly clientActions?: readonly string[];
-    readonly ready: Promise<void>;
-    readonly onActionMessage: vscode.Event<ActionMessage>;
-    initialize(glspClient: GLSPClient): Disposable;
-    sendMessage(actionMessage: ActionMessage): void;
-    dispose(): void;
-}
+export type VscodeWebviewEndpoint = WebviewEndpoint;
 
 export interface WebviewEndpointFactory {
     create(options: WebviewEndpointOptions): VscodeWebviewEndpoint;
