@@ -66,10 +66,10 @@ export class ActionRouter<TDocument extends vscode.CustomDocument = vscode.Custo
             return matchingHandlers[0];
         }
 
-        console.warn(
-            `ActionRouter.processMessage found multiple handlers for action kind "${actionKind}". Using the first registered handler.`,
-            matchingHandlers.map(handler => handler.constructor.name)
+        throw new Error(
+            `ActionRouter.processMessage found multiple handlers for action kind "${actionKind}": ${matchingHandlers
+                .map(handler => handler.constructor.name)
+                .join(', ')}`
         );
-        return matchingHandlers[0];
     }
 }

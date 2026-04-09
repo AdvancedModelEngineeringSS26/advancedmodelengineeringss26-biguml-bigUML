@@ -19,9 +19,15 @@ import { inject, injectable } from 'inversify';
 import * as vscode from 'vscode';
 import { TYPES } from '../common/types.js';
 import type { ActionDispatcher } from './action-dispatcher.js';
+import type { HandledActionRegistry } from './handled-action-registry.js';
 
 @injectable()
 export class ActionListener implements vscode.Disposable {
+    /**
+     * Contribution-native observation service for client, server, and
+     * extension-host actions. This replaces direct action stream access on the
+     * compatibility connector for new code.
+     */
     protected readonly onClientActionEmitter = new vscode.EventEmitter<ActionMessage>();
     readonly onClientAction = this.onClientActionEmitter.event;
 
@@ -68,37 +74,51 @@ export class ActionListener implements vscode.Disposable {
 
 @injectable()
 export class ActionRequestHandlerRegistry implements vscode.Disposable {
-    protected readonly toDispose = new DisposableCollection();
-
+    /**
+     * Contribution-native request/response registration for extension-host
+     * handled actions. New runtime code should use this instead of legacy
+     * request helper APIs on the compatibility wrappers.
+     */
     constructor(
         @inject(TYPES.ActionListener) protected readonly actionListener: ActionListener,
-        @inject(TYPES.ActionDispatcher) protected readonly actionDispatcher: ActionDispatcher
+        @inject(TYPES.ActionDispatcher) protected readonly actionDispatcher: ActionDispatcher,
+        @inject(TYPES.HandledActionRegistry) protected readonly handledActionRegistry: HandledActionRegistry
     ) {}
 
     handleGLSPRequest<TRequest extends RequestAction<ResponseAction>, TResponse extends ResponseAction = ResponseAction>(
         kind: TRequest['kind'],
         handler: (action: ActionMessage<TRequest>) => MaybePromise<TResponse>
     ): Disposable {
-        return this.actionListener.registerListener(message => {
-            if (message.action.kind === kind) {
-                void this.dispatchHandledResponse(handler, message as ActionMessage<TRequest>);
-            }
-        });
+        const toDispose = new DisposableCollection();
+        toDispose.push(
+            this.handledActionRegistry.register(kind),
+            this.actionListener.registerListener(message => {
+                if (message.action.kind === kind) {
+                    void this.dispatchHandledResponse(handler, message as ActionMessage<TRequest>);
+                }
+            })
+        );
+        return toDispose;
     }
 
     handleVSCodeRequest<TRequest extends RequestAction<ResponseAction>, TResponse extends ResponseAction = ResponseAction>(
         kind: TRequest['kind'],
         handler: (action: ActionMessage<TRequest>) => MaybePromise<TResponse>
     ): Disposable {
-        return this.actionListener.registerVSCodeListener(message => {
-            if (message.action.kind === kind) {
-                void this.dispatchHandledResponse(handler, message as ActionMessage<TRequest>);
-            }
-        });
+        const toDispose = new DisposableCollection();
+        toDispose.push(
+            this.handledActionRegistry.register(kind),
+            this.actionListener.registerVSCodeListener(message => {
+                if (message.action.kind === kind) {
+                    void this.dispatchHandledResponse(handler, message as ActionMessage<TRequest>);
+                }
+            })
+        );
+        return toDispose;
     }
 
     dispose(): void {
-        this.toDispose.dispose();
+        // Registration state is owned by the returned disposables.
     }
 
     protected async dispatchHandledResponse<TRequest extends RequestAction<ResponseAction>, TResponse extends ResponseAction>(

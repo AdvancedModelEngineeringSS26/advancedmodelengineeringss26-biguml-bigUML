@@ -15,7 +15,6 @@ import {
 } from '@borkdominik-biguml/big-vscode-contribution/vscode';
 import type { InferResponseType } from '@borkdominik-biguml/uml-glsp-server';
 import {
-    DisposableCollection,
     type ActionMessage,
     type Disposable,
     type MaybePromise,
@@ -23,10 +22,17 @@ import {
     type ResponseAction
 } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
-import { VscodeHandledActionRegistry } from '../connector/glsp-vscode-connector.js';
 
 /**
  * Compatibility adapter over the contribution-native action listener services.
+ *
+ * @deprecated Deprecated for new connector/runtime code. Retained so frozen
+ * first-party packages can continue resolving `TYPES.ActionListener`.
+ *
+ * New code should inject contribution `ActionListener` for observation and the
+ * contribution request-handler registry for request/response flows.
+ *
+ * See `client/docs/feature1/compatibility-layer.md`.
  *
  * `big-vscode` retains this wrapper so existing packages can keep resolving
  * `TYPES.ActionListener` while request handling and action observation are owned
@@ -38,8 +44,6 @@ export class ActionListener implements Disposable {
     protected readonly contributionActionListener: ContributionActionListener;
     @inject(ContributionActionRequestHandlerRegistry)
     protected readonly requestHandlerRegistry: ContributionActionRequestHandlerRegistry;
-    @inject(VscodeHandledActionRegistry)
-    protected readonly vscodeHandledActionRegistry: VscodeHandledActionRegistry;
 
     dispose(): void {
         // Delegated state is owned by contribution services.
@@ -61,30 +65,20 @@ export class ActionListener implements Disposable {
         kind: TRequest['kind'],
         handler: (action: ActionMessage<TRequest>) => MaybePromise<InferResponseType<TRequest>>
     ): Disposable {
-        const toDispose = new DisposableCollection();
-        toDispose.push(
-            this.vscodeHandledActionRegistry.register(kind),
-            this.requestHandlerRegistry.handleGLSPRequest(
-                kind,
-                handler as (action: ActionMessage<TRequest>) => MaybePromise<ResponseAction>
-            )
+        return this.requestHandlerRegistry.handleGLSPRequest(
+            kind,
+            handler as (action: ActionMessage<TRequest>) => MaybePromise<ResponseAction>
         );
-        return toDispose;
     }
 
     handleVSCodeRequest<TRequest extends RequestAction<ResponseAction>>(
         kind: TRequest['kind'],
         handler: (action: ActionMessage<TRequest>) => MaybePromise<InferResponseType<TRequest>>
     ): Disposable {
-        const toDispose = new DisposableCollection();
-        toDispose.push(
-            this.vscodeHandledActionRegistry.register(kind),
-            this.requestHandlerRegistry.handleVSCodeRequest(
-                kind,
-                handler as (action: ActionMessage<TRequest>) => MaybePromise<ResponseAction>
-            )
+        return this.requestHandlerRegistry.handleVSCodeRequest(
+            kind,
+            handler as (action: ActionMessage<TRequest>) => MaybePromise<ResponseAction>
         );
-        return toDispose;
     }
 
     createCache(cachedActionKinds: string[]): CacheActionListener {

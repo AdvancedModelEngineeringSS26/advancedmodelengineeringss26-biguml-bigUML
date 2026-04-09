@@ -8,44 +8,27 @@
  *********************************************************************************/
 import { TYPES as CONTRIBUTION_TYPES } from '@borkdominik-biguml/big-vscode-contribution';
 import type {
+    ActionDispatcher as ContributionActionDispatcher,
     ActionListener as ContributionActionListener,
     ClientManager as ContributionClientManager,
+    ConnectorMessenger as ContributionConnectorMessenger,
     VscodeConnector as ContributionVscodeConnector
 } from '@borkdominik-biguml/big-vscode-contribution/vscode';
-import { type Action, ActionMessage, type Args, Disposable, type GlspVscodeClient, type GlspVscodeServer } from '@eclipse-glsp/vscode-integration';
+import { type Action, ActionMessage, type Args, type GlspVscodeClient, type GlspVscodeServer } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import type * as vscode from 'vscode';
-import { Messenger } from 'vscode-messenger';
 import { VscodeAction } from '../../../common/vscode.action.js';
 import { TYPES } from '../../vscode-common.types.js';
 
 @injectable()
-export class VscodeHandledActionRegistry {
-    protected readonly actionKinds = new Set<string>();
-
-    register(actionKind: string): Disposable {
-        this.actionKinds.add(actionKind);
-        return Disposable.create(() => {
-            this.actionKinds.delete(actionKind);
-        });
-    }
-
-    has(actionKind: string): boolean {
-        return this.actionKinds.has(actionKind);
-    }
-}
-
-@injectable()
 export class BigVscodeMessagePropagationFilter {
-    constructor(@inject(VscodeHandledActionRegistry) protected readonly handledActions: VscodeHandledActionRegistry) {}
-
     filter(message: unknown, origin: 'client' | 'server'): unknown | undefined {
         if (origin !== 'client' || !ActionMessage.is(message)) {
             return message;
         }
 
         const action = message.action;
-        if (VscodeAction.isExtensionOnly(action) || this.handledActions.has(action.kind)) {
+        if (VscodeAction.isExtensionOnly(action)) {
             return undefined;
         }
 
@@ -56,25 +39,37 @@ export class BigVscodeMessagePropagationFilter {
 /**
  * Compatibility facade for the retained `big-vscode` connector surface.
  *
- * Runtime ownership lives in `big-vscode-contribution`. This class only keeps
- * the API that existing packages still resolve through `TYPES.GlspVSCodeConnector`
- * plus a small set of deprecated action-helper members for out-of-scope consumers.
+ * @deprecated Deprecated for new connector/runtime code. This class is retained
+ * only so frozen first-party packages can continue to resolve
+ * `TYPES.GlspVSCodeConnector` without source changes.
+ *
+ * Runtime ownership lives in `big-vscode-contribution`. New code should prefer:
+ * - contribution `VscodeConnector` for client registration and document lifecycle
+ * - contribution `ClientManager` for client lookup and active-client state
+ * - contribution `ActionDispatcher` for dispatching actions
+ * - contribution `ActionListener` for observing client/server/VS Code actions
+ *
+ * See `client/docs/feature1/compatibility-layer.md`.
  */
 @injectable()
 export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vscode.CustomDocument> implements vscode.Disposable {
-    readonly messenger = new Messenger({ ignoreHiddenViews: false });
-
     constructor(
         @inject(TYPES.GlspServer) protected readonly glspServer: GlspVscodeServer,
         @inject(CONTRIBUTION_TYPES.VscodeConnector)
         protected readonly contributionConnector: ContributionVscodeConnector<TDocument>,
         @inject(CONTRIBUTION_TYPES.ClientManager)
         protected readonly clientManager: ContributionClientManager<TDocument>,
+        @inject(CONTRIBUTION_TYPES.ActionDispatcher)
+        protected readonly contributionActionDispatcher: ContributionActionDispatcher<TDocument>,
         @inject(CONTRIBUTION_TYPES.ActionListener)
         protected readonly contributionActionListener: ContributionActionListener,
-        @inject(VscodeHandledActionRegistry)
-        protected readonly handledActions: VscodeHandledActionRegistry
+        @inject(CONTRIBUTION_TYPES.ConnectorMessenger)
+        protected readonly connectorMessenger: ContributionConnectorMessenger
     ) {}
+
+    get messenger() {
+        return this.connectorMessenger.messenger;
+    }
 
     get documents(): TDocument[] {
         return this.clients.map(client => client.document);
@@ -97,21 +92,27 @@ export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vs
     }
 
     /**
-     * @deprecated Prefer `TYPES.ActionListener` instead.
+     * @deprecated Use contribution `ActionListener.onServerAction` or
+     * `ActionListener.registerServerListener(...)`. Retained only for frozen
+     * first-party packages.
      */
     get onServerActionMessage(): vscode.Event<any> {
         return this.contributionActionListener.onServerAction;
     }
 
     /**
-     * @deprecated Prefer `TYPES.ActionListener` instead.
+     * @deprecated Use contribution `ActionListener.onClientAction` or
+     * `ActionListener.registerListener(...)`. Retained only for frozen
+     * first-party packages.
      */
     get onClientActionMessage(): vscode.Event<any> {
         return this.contributionActionListener.onClientAction;
     }
 
     /**
-     * @deprecated Prefer `TYPES.ActionListener` instead.
+     * @deprecated Use contribution `ActionListener.onVscodeAction` or
+     * `ActionListener.registerVSCodeListener(...)`. Retained only for frozen
+     * first-party packages.
      */
     get onVSCodeActionMessage(): vscode.Event<any> {
         return this.contributionActionListener.onVscodeAction;
@@ -134,14 +135,18 @@ export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vs
     }
 
     /**
-     * @deprecated Prefer `TYPES.ActionDispatcher` instead.
+     * @deprecated Use contribution `ActionDispatcher.dispatch(action, clientId)`.
+     * Retained only for frozen first-party packages.
      */
     sendActionToActiveClient(action: Action): void {
         this.dispatchAction(action);
     }
 
     /**
-     * @deprecated Prefer `TYPES.ActionDispatcher` instead.
+     * @deprecated Retained only for frozen first-party packages that still rely
+     * on the legacy helper name. New code should use contribution
+     * `ActionDispatcher.dispatch(action, clientId)` or direct endpoint
+     * communication only when bypassing action routing intentionally.
      */
     public sendActionToActiveServer(action: Action): void {
         this.clients.forEach(client => {
@@ -155,7 +160,9 @@ export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vs
     }
 
     /**
-     * @deprecated Prefer `TYPES.ActionDispatcher` instead.
+     * @deprecated Use contribution `ActionDispatcher.dispatch(action, clientId)`
+     * for routed actions or the GLSP server directly when intentionally bypassing
+     * connector routing. Retained only for frozen first-party packages.
      */
     public sendActionToServer(clientId: string, action: Action): void {
         this.glspServer.onSendToServerEmitter.fire({
@@ -171,13 +178,8 @@ export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vs
             return;
         }
 
-        const dispatched = this.contributionConnector.dispatchAction(action, client.clientId);
-        if (!dispatched && this.handledActions.has(action.kind)) {
-            this.contributionActionListener.emitVscodeAction({
-                clientId: client.clientId,
-                action
-            });
-        } else if (!dispatched) {
+        const dispatched = this.contributionActionDispatcher.dispatch(action, client.clientId);
+        if (!dispatched) {
             console.warn('Could not dispatch action. No handler found for action kind:', action.kind);
         }
     }

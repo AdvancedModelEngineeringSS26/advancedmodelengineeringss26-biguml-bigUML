@@ -12,14 +12,13 @@ import { TYPES } from '../../vscode-common.types.js';
 import { bindLifecycle } from '../container/bindings.js';
 import { VscodeFeatureModule } from '../container/container.js';
 import { ConnectionManager } from './connection-manager.js';
-import { BigGlspVSCodeConnector, BigVscodeMessagePropagationFilter, VscodeHandledActionRegistry } from './glsp-vscode-connector.js';
+import { BigGlspVSCodeConnector, BigVscodeMessagePropagationFilter } from './glsp-vscode-connector.js';
 import { SelectionService } from './selection-service.js';
 
 export const connectorModule = new VscodeFeatureModule(context => {
     context.bind(CONTRIBUTION_TYPES.GlspVscodeServer).toDynamicValue(bindingContext =>
         bindingContext.container.get(TYPES.GlspServer)
     );
-    context.bind(VscodeHandledActionRegistry).toSelf().inSingletonScope();
     context.bind(CONTRIBUTION_TYPES.MessagePropagationFilter).to(BigVscodeMessagePropagationFilter).inSingletonScope();
     bindLifecycle(context, TYPES.GlspVSCodeConnector, BigGlspVSCodeConnector);
 

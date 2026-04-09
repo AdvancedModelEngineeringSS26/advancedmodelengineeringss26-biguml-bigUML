@@ -35,8 +35,15 @@ export class NavigationHandler<TDocument extends vscode.CustomDocument = vscode.
         const showOptionsKey = 'jsonOpenerOptions';
         const { uri, args } = message.action.target;
         const showOptionsField = args?.[showOptionsKey];
-        const parsedShowOptions =
-            typeof showOptionsField === 'string' ? JSON.parse(showOptionsField) : showOptionsField ? JSON.parse(String(showOptionsField)) : {};
+        let parsedShowOptions = {};
+        if (typeof showOptionsField !== 'undefined') {
+            try {
+                parsedShowOptions =
+                    typeof showOptionsField === 'string' ? JSON.parse(showOptionsField) : JSON.parse(String(showOptionsField));
+            } catch (error) {
+                console.warn('NavigationHandler.handle received invalid jsonOpenerOptions.', error);
+            }
+        }
 
         void vscode.window.showTextDocument(vscode.Uri.parse(uri), { ...args, ...parsedShowOptions }).then(
             () => undefined,

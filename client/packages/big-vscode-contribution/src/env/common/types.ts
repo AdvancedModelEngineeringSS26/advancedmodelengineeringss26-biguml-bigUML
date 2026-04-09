@@ -10,10 +10,13 @@
 export const TYPES = {
     GlspVscodeServer: Symbol('GlspVscodeServer'),
     VscodeConnector: Symbol('VscodeConnector'),
+    ConnectorMessenger: Symbol('ConnectorMessenger'),
     ClientManager: Symbol('ClientManager'),
+    ClientRegistrationContribution: Symbol('ClientRegistrationContribution'),
     ActionRouter: Symbol('ActionRouter'),
     ActionDispatcher: Symbol('ActionDispatcher'),
     ActionListener: Symbol('ActionListener'),
+    HandledActionRegistry: Symbol('HandledActionRegistry'),
     MessageHandler: Symbol('MessageHandler'),
     SelectionTracker: Symbol('SelectionTracker'),
     DirtyStateHandler: Symbol('DirtyStateHandler'),

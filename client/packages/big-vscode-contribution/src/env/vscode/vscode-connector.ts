@@ -8,8 +8,15 @@
  **********************************************************************************/
 
 import type { Action } from '@eclipse-glsp/protocol';
-import { ActionMessage, Disposable, DisposableCollection, type Args, type GlspVscodeClient, type GlspVscodeServer } from '@eclipse-glsp/vscode-integration';
-import { inject, injectable, optional } from 'inversify';
+import {
+    ActionMessage,
+    Disposable,
+    DisposableCollection,
+    type Args,
+    type GlspVscodeClient,
+    type GlspVscodeServer
+} from '@eclipse-glsp/vscode-integration';
+import { inject, injectable, multiInject, optional } from 'inversify';
 import type * as vscode from 'vscode';
 import type { VscodeMessagePropagationFilter } from '../common/message-filter.js';
 import type { MessageOrigin, MessageProcessingResult } from '../common/message-routing.js';
@@ -17,6 +24,7 @@ import { TYPES } from '../common/types.js';
 import type { ActionDispatcher } from './action-dispatcher.js';
 import type { ActionRouter } from './action-router.js';
 import type { ClientManager } from './client-manager.js';
+import type { ClientRegistrationContribution } from './client-registration.js';
 import type { DocumentManager } from './document-manager.js';
 
 export interface RegisterClientOptions {
@@ -35,8 +43,12 @@ export class VscodeConnector<TDocument extends vscode.CustomDocument = vscode.Cu
         @inject(TYPES.ActionDispatcher) protected readonly actionDispatcher: ActionDispatcher<TDocument>,
         @inject(TYPES.DocumentManager) protected readonly documentManager: DocumentManager<TDocument>,
         @inject(TYPES.GlspVscodeServer) @optional() protected readonly server?: GlspVscodeServer,
-        @inject(TYPES.MessagePropagationFilter) @optional()
-        protected readonly messagePropagationFilter?: VscodeMessagePropagationFilter
+        @multiInject(TYPES.MessagePropagationFilter)
+        @optional()
+        protected readonly messagePropagationFilters: VscodeMessagePropagationFilter[] = [],
+        @multiInject(TYPES.ClientRegistrationContribution)
+        @optional()
+        protected readonly clientRegistrationContributions: ClientRegistrationContribution<TDocument>[] = []
     ) {
         if (this.server) {
             this.toDispose.push(this.server.onServerMessage(message => this.onServerMessage(message)));
@@ -94,6 +106,13 @@ export class VscodeConnector<TDocument extends vscode.CustomDocument = vscode.Cu
                     })
                 )
             );
+
+            for (const contribution of this.clientRegistrationContributions) {
+                const disposable = contribution.onClientRegistered(client);
+                if (disposable) {
+                    clientDisposables.push(disposable);
+                }
+            }
         } catch (error) {
             clientDisposables.dispose();
             this.clientDisposables.delete(client.clientId);
@@ -153,9 +172,13 @@ export class VscodeConnector<TDocument extends vscode.CustomDocument = vscode.Cu
     }
 
     protected filterMessage(message: unknown, origin: MessageOrigin): unknown | undefined {
-        if (!this.messagePropagationFilter) {
-            return message;
+        let filteredMessage: unknown | undefined = message;
+        for (const filter of this.messagePropagationFilters) {
+            if (typeof filteredMessage === 'undefined') {
+                break;
+            }
+            filteredMessage = filter.filter(filteredMessage, origin);
         }
-        return this.messagePropagationFilter.filter(message, origin);
+        return filteredMessage;
     }
 }

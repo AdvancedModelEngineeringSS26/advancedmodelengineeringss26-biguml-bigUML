@@ -19,6 +19,13 @@ import { VscodeAction } from '../../../common/vscode.action.js';
 /**
  * Compatibility wrapper over the contribution action dispatcher.
  *
+ * @deprecated Deprecated for new connector/runtime code. Retained so frozen
+ * first-party packages can continue resolving `TYPES.ActionDispatcher`.
+ *
+ * New code should inject contribution `ActionDispatcher` directly.
+ *
+ * See `client/docs/feature1/compatibility-layer.md`.
+ *
  * `big-vscode` keeps this class so existing packages can keep resolving
  * `TYPES.ActionDispatcher` while the actual dispatch implementation lives in
  * `big-vscode-contribution`.

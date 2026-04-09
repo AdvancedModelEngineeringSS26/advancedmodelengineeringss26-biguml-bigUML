@@ -7,8 +7,11 @@
  * SPDX-License-Identifier: MIT
  *********************************************************************************/
 import { TYPES as CONTRIBUTION_TYPES } from '@borkdominik-biguml/big-vscode-contribution';
-import type { WebviewEndpointFactory as ContributionWebviewEndpointFactory } from '@borkdominik-biguml/big-vscode-contribution';
-import { ReactHtmlProvider, TYPES, WebviewEditorProvider } from '@borkdominik-biguml/big-vscode/vscode';
+import type {
+    ConnectorMessenger as ContributionConnectorMessenger,
+    DefaultWebviewEndpointFactory as ContributionWebviewEndpointFactory
+} from '@borkdominik-biguml/big-vscode-contribution/vscode';
+import { ReactHtmlProvider, WebviewEditorProvider } from '@borkdominik-biguml/big-vscode/vscode';
 import { type GLSPDiagramIdentifier, type GlspVscodeClient } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import {
@@ -23,8 +26,6 @@ import {
     type WebviewPanel,
     type WebviewView
 } from 'vscode';
-import { GLSPIsReadyAction } from '../common/actions/editor.actions.js';
-import type { ThemeIntegration } from './features/theme/theme-integration.js';
 
 export const UmlDiagramEditorSettings = Symbol('UmlDiagramEditorSettings');
 export interface UmlDiagramEditorSettings {
@@ -34,10 +35,10 @@ export interface UmlDiagramEditorSettings {
 
 @injectable()
 export class UmlDiagramEditorProvider extends WebviewEditorProvider {
-    @inject(TYPES.Theme)
-    protected readonly themeIntegration: ThemeIntegration;
     @inject(CONTRIBUTION_TYPES.WebviewEndpointFactory)
     protected readonly webviewEndpointFactory: ContributionWebviewEndpointFactory;
+    @inject(CONTRIBUTION_TYPES.ConnectorMessenger)
+    protected readonly connectorMessenger: ContributionConnectorMessenger;
 
     protected clients = new Map<string, GlspVscodeClient>();
     protected viewCounter = 0;
@@ -117,7 +118,7 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
 
         const endpoint = this.webviewEndpointFactory.create({
             diagramIdentifier,
-            messenger: this.connector.messenger,
+            messenger: this.connectorMessenger.messenger,
             webviewPanel
         });
 
@@ -127,12 +128,6 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
             document,
             webviewEndpoint: endpoint
         };
-
-        endpoint.onActionMessage(m => {
-            if (GLSPIsReadyAction.is(m.action)) {
-                this.themeIntegration.updateTheme(client);
-            }
-        });
 
         this.webviewMessenger.reuse(endpoint.messenger, endpoint.messageParticipant);
         await this.connector.registerClient(client);

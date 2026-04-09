@@ -8,6 +8,7 @@
  **********************************************************************************/
 
 import { RequestModelAction, SaveModelAction } from '@eclipse-glsp/protocol';
+import { Deferred } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import * as vscode from 'vscode';
 import { TYPES } from '../common/types.js';
@@ -16,19 +17,32 @@ import type { ClientManager } from './client-manager.js';
 
 @injectable()
 export class DocumentManager<TDocument extends vscode.CustomDocument = vscode.CustomDocument> {
+    protected static readonly SAVE_TIMEOUT_MS = 10_000;
+
     protected readonly onDidChangeCustomDocumentEmitter = new vscode.EventEmitter<
         vscode.CustomDocumentEditEvent<TDocument> | vscode.CustomDocumentContentChangeEvent<TDocument>
     >();
-    protected readonly onDidDocumentSavedEmitter = new vscode.EventEmitter<TDocument>();
+    protected readonly pendingSaves = new Map<string, Deferred<void>>();
     readonly onDidChangeCustomDocument = this.onDidChangeCustomDocumentEmitter.event;
+
+    /**
+     * Contribution-native owner of custom document lifecycle coordination. This
+     * replaces save/revert orchestration that previously lived on the connector.
+     */
 
     constructor(
         @inject(TYPES.ClientManager) protected readonly clientManager: ClientManager<TDocument>,
         @inject(TYPES.ActionDispatcher) protected readonly actionDispatcher: ActionDispatcher<TDocument>
     ) {}
 
-    notifyDocumentSaved(document: TDocument): void {
-        this.onDidDocumentSavedEmitter.fire(document);
+    notifyDocumentSaved(clientId: string, _document: TDocument): void {
+        const pendingSave = this.pendingSaves.get(clientId);
+        if (!pendingSave) {
+            return;
+        }
+
+        this.pendingSaves.delete(clientId);
+        pendingSave.resolve();
     }
 
     notifyDocumentEdit(event: vscode.CustomDocumentEditEvent<TDocument>): void {
@@ -45,20 +59,34 @@ export class DocumentManager<TDocument extends vscode.CustomDocument = vscode.Cu
             throw new Error('DocumentManager.saveDocument failed: document is not registered.');
         }
 
-        return new Promise<void>((resolve, reject) => {
-            const listener = this.onDidDocumentSavedEmitter.event(savedDocument => {
-                if (savedDocument === document) {
-                    listener.dispose();
-                    resolve();
-                }
-            });
+        if (this.pendingSaves.has(clientId)) {
+            throw new Error(`DocumentManager.saveDocument failed: save already pending for client ${clientId}.`);
+        }
 
-            const dispatched = this.actionDispatcher.dispatch(SaveModelAction.create({ fileUri: destination?.path }), clientId);
-            if (!dispatched) {
-                listener.dispose();
-                reject(new Error(`DocumentManager.saveDocument failed: could not dispatch save for client ${clientId}.`));
+        const deferred = new Deferred<void>();
+        this.pendingSaves.set(clientId, deferred);
+
+        const dispatched = this.actionDispatcher.dispatch(SaveModelAction.create({ fileUri: destination?.path }), clientId);
+        if (!dispatched) {
+            this.pendingSaves.delete(clientId);
+            throw new Error(`DocumentManager.saveDocument failed: could not dispatch save for client ${clientId}.`);
+        }
+
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+        try {
+            await new Promise<void>((resolve, reject) => {
+                timeoutHandle = setTimeout(() => {
+                    this.pendingSaves.delete(clientId);
+                    reject(new Error(`DocumentManager.saveDocument failed: timed out waiting for save completion for client ${clientId}.`));
+                }, DocumentManager.SAVE_TIMEOUT_MS);
+
+                deferred.promise.then(resolve, reject);
+            });
+        } finally {
+            if (timeoutHandle) {
+                clearTimeout(timeoutHandle);
             }
-        });
+        }
     }
 
     async revertDocument(document: TDocument, diagramType: string): Promise<void> {
@@ -70,10 +98,6 @@ export class DocumentManager<TDocument extends vscode.CustomDocument = vscode.Cu
         const client = this.clientManager.getClient(clientId);
         if (!client) {
             throw new Error(`DocumentManager.revertDocument failed: client ${clientId} is not registered.`);
-        }
-
-        if (!client.webviewEndpoint.webviewPanel.active) {
-            return;
         }
 
         const dispatched = this.actionDispatcher.dispatch(

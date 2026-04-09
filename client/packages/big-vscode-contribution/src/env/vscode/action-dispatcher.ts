@@ -14,15 +14,21 @@ import type * as vscode from 'vscode';
 import { TYPES } from '../common/types.js';
 import type { ClientManager } from './client-manager.js';
 import type { ActionListener } from './action-listener.js';
+import type { HandledActionRegistry } from './handled-action-registry.js';
 
 @injectable()
 export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.CustomDocument> implements vscode.Disposable {
     protected readonly requests = new Map<string, Deferred<ActionMessage<any>>>();
     protected readonly toDispose = new DisposableCollection();
 
+    /**
+     * Contribution-native action dispatching. This replaces direct dispatch
+     * through the compatibility connector for new runtime behavior.
+     */
     constructor(
         @inject(TYPES.ClientManager) protected readonly clientManager: ClientManager<TDocument>,
         @inject(TYPES.ActionListener) protected readonly actionListener: ActionListener,
+        @inject(TYPES.HandledActionRegistry) protected readonly handledActionRegistry: HandledActionRegistry,
         @inject(TYPES.GlspVscodeServer) @optional() protected readonly server?: GlspVscodeServer
     ) {
         this.toDispose.push(
@@ -56,6 +62,11 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
 
         if (client.webviewEndpoint.serverActions?.includes(action.kind)) {
             this.server?.onSendToServerEmitter.fire(message);
+            dispatched = true;
+        }
+
+        if (!dispatched && this.handledActionRegistry.has(action.kind)) {
+            this.actionListener.emitVscodeAction(message as ActionMessage);
             dispatched = true;
         }
 

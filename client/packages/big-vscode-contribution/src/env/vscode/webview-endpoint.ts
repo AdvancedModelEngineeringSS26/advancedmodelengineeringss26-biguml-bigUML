@@ -14,15 +14,19 @@ import {
     type GLSPClient,
     type WebviewEndpointOptions
 } from '@eclipse-glsp/vscode-integration';
-import { injectable } from 'inversify';
+import { inject, injectable } from 'inversify';
 import type { VscodeWebviewEndpoint } from '../common/webview-endpoint.js';
+
+export const WEBVIEW_ENDPOINT_TYPES = {
+    WebviewEndpointOptions: Symbol('WebviewEndpointOptions')
+} as const;
 
 @injectable()
 export class InjectableWebviewEndpoint extends WebviewEndpoint implements VscodeWebviewEndpoint {
     protected initialized = false;
     protected hasSentDiagramIdentifier = false;
 
-    constructor(options: WebviewEndpointOptions) {
+    constructor(@inject(WEBVIEW_ENDPOINT_TYPES.WebviewEndpointOptions) options: WebviewEndpointOptions) {
         super(options);
 
         this.toDispose.push(

@@ -23,6 +23,10 @@ export class ClientManager<TDocument extends vscode.CustomDocument = vscode.Cust
     protected readonly onDidDisposeEmitter = new vscode.EventEmitter<GlspVscodeClient<TDocument>>();
     readonly onDidDispose = this.onDidDisposeEmitter.event;
 
+    /**
+     * Contribution-native owner of client registration and lookup state. This
+     * replaces direct client/document tracking on the legacy connector.
+     */
     get clients(): readonly GlspVscodeClient<TDocument>[] {
         return Array.from(this.clientsById.values());
     }

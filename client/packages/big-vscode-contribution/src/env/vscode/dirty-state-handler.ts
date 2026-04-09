@@ -44,7 +44,7 @@ export class DirtyStateHandler<TDocument extends vscode.CustomDocument = vscode.
         const reason = action.reason;
 
         if (reason === 'save') {
-            this.documentManager.notifyDocumentSaved(client.document);
+            this.documentManager.notifyDocumentSaved(client.clientId, client.document);
         } else if (reason === 'operation' && action.isDirty) {
             this.documentManager.notifyDocumentEdit({
                 document: client.document,

@@ -27,6 +27,10 @@ export class SelectionTracker<TDocument extends vscode.CustomDocument = vscode.C
 
     constructor(@inject(TYPES.ClientManager) protected readonly clientManager: ClientManager<TDocument>) {}
 
+    /**
+     * Contribution-native owner of per-client selection state. This replaces
+     * the legacy connector selection map for new runtime code.
+     */
     get selection(): SelectionState | undefined {
         const clientId = this.clientManager.activeClient?.clientId;
         return clientId ? this.selections.get(clientId) : undefined;

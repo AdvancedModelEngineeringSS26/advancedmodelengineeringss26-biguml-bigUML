@@ -8,16 +8,19 @@
  **********************************************************************************/
 
 import type { GlspVscodeServer } from '@eclipse-glsp/vscode-integration';
-import { ContainerModule } from 'inversify';
+import { type Container, ContainerModule } from 'inversify';
 import { TYPES } from '../common/types.js';
 import { ActionDispatcher } from './action-dispatcher.js';
 import { ActionListener, ActionRequestHandlerRegistry } from './action-listener.js';
 import { ActionRouter } from './action-router.js';
 import { ClientManager } from './client-manager.js';
+import { ConnectorMessenger } from './connector-messenger.js';
 import { DiagnosticsHandler } from './diagnostics-handler.js';
 import { DirtyStateHandler } from './dirty-state-handler.js';
 import { DocumentManager } from './document-manager.js';
 import { ExportHandler } from './export-handler.js';
+import { HandledActionMessageFilter } from './handled-action-message-filter.js';
+import { HandledActionRegistry } from './handled-action-registry.js';
 import { MessageHandler } from './message-handler.js';
 import { NavigationHandler } from './navigation-handler.js';
 import { ProgressHandler } from './progress-handler.js';
@@ -37,16 +40,21 @@ export function createVscodeContributionModule(options: VscodeContributionModule
         }
 
         bind(TYPES.ClientManager).to(ClientManager).inSingletonScope();
+        bind(TYPES.ConnectorMessenger).to(ConnectorMessenger).inSingletonScope();
+        bind(TYPES.HandledActionRegistry).to(HandledActionRegistry).inSingletonScope();
         bind(TYPES.ActionListener).to(ActionListener).inSingletonScope();
         bind(TYPES.ActionRouter).to(ActionRouter).inSingletonScope();
         bind(TYPES.ActionDispatcher).to(ActionDispatcher).inSingletonScope();
         bind(ActionRequestHandlerRegistry).toSelf().inSingletonScope();
         bind(TYPES.SelectionTracker).to(SelectionTracker).inSingletonScope();
         bind(TYPES.DocumentManager).to(DocumentManager).inSingletonScope();
-        bind(TYPES.WebviewEndpointFactory).to(DefaultWebviewEndpointFactory).inSingletonScope();
+        bind(TYPES.WebviewEndpointFactory)
+            .toDynamicValue(context => new DefaultWebviewEndpointFactory(context.container as Container))
+            .inSingletonScope();
         bind(TYPES.VscodeConnector).to(VscodeConnector).inSingletonScope();
 
         bind(TYPES.MessageHandler).to(MessageHandler).inSingletonScope();
+        bind(HandledActionMessageFilter).toSelf().inSingletonScope();
         bind(TYPES.DirtyStateHandler).to(DirtyStateHandler).inSingletonScope();
         bind(TYPES.DiagnosticsHandler).to(DiagnosticsHandler).inSingletonScope();
         bind(TYPES.ProgressHandler).to(ProgressHandler).inSingletonScope();
@@ -54,6 +62,7 @@ export function createVscodeContributionModule(options: VscodeContributionModule
         bind(TYPES.ExportHandler).to(ExportHandler).inSingletonScope();
         bind(SelectionHandler).toSelf().inSingletonScope();
 
+        bind(TYPES.MessagePropagationFilter).toService(HandledActionMessageFilter);
         bind(TYPES.VscodeActionHandler).toService(TYPES.MessageHandler);
         bind(TYPES.VscodeActionHandler).toService(SelectionHandler);
         bind(TYPES.VscodeActionHandler).toService(TYPES.DirtyStateHandler);

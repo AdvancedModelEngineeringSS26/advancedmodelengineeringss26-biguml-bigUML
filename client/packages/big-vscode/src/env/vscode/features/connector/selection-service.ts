@@ -26,7 +26,9 @@ export interface SelectionMessage {
 /**
  * SelectionService is responsible for managing selection states of GLSP clients.
  * It listens to selection updates and view state changes to keep track of the current selection.
- * It is a wrapper around the GLSP connector to simplify the selection process.
+ * It is a compatibility facade over contribution `SelectionTracker` and remains
+ * supported for frozen first-party packages that resolve `TYPES.SelectionService`.
+ * New connector/runtime code should prefer contribution `SelectionTracker`.
  */
 @injectable()
 export class SelectionService implements Disposable {
