@@ -7,6 +7,7 @@
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
 
+import { DisposableCollection } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import * as vscode from 'vscode';
 import type { SelectionState } from '../common/message-routing.js';
@@ -21,11 +22,18 @@ export interface SelectionChangeEvent {
 @injectable()
 export class SelectionTracker<TDocument extends vscode.CustomDocument = vscode.CustomDocument> implements vscode.Disposable {
     protected readonly selections = new Map<string, SelectionState>();
+    protected readonly toDispose = new DisposableCollection();
 
     protected readonly onDidSelectionChangeEmitter = new vscode.EventEmitter<SelectionChangeEvent>();
     readonly onDidSelectionChange = this.onDidSelectionChangeEmitter.event;
 
-    constructor(@inject(TYPES.ClientManager) protected readonly clientManager: ClientManager<TDocument>) {}
+    constructor(@inject(TYPES.ClientManager) protected readonly clientManager: ClientManager<TDocument>) {
+        this.toDispose.push(
+            this.clientManager.onDidDispose(client => {
+                this.clearSelection(client.clientId);
+            })
+        );
+    }
 
     /**
      * Contribution-native owner of per-client selection state. This replaces
@@ -50,6 +58,7 @@ export class SelectionTracker<TDocument extends vscode.CustomDocument = vscode.C
     }
 
     dispose(): void {
+        this.toDispose.dispose();
         this.selections.clear();
         this.onDidSelectionChangeEmitter.dispose();
     }

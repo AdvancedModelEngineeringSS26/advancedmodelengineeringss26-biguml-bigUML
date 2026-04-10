@@ -27,13 +27,14 @@ interface ProgressReporter {
 
 @injectable()
 export class ProgressHandler<TDocument extends vscode.CustomDocument = vscode.CustomDocument>
-    implements VscodeActionHandler<TDocument>
+    implements VscodeActionHandler<TDocument>, vscode.Disposable
 {
     readonly actionKinds = [StartProgressAction.KIND, UpdateProgressAction.KIND, EndProgressAction.KIND] as const;
     protected readonly reportersByClientId = new Map<string, Map<string, ProgressReporter>>();
+    protected readonly disposeListener: vscode.Disposable;
 
     constructor(@inject(TYPES.ClientManager) protected readonly clientManager: ClientManager<TDocument>) {
-        this.clientManager.onDidDispose(client => {
+        this.disposeListener = this.clientManager.onDidDispose(client => {
             const reporters = this.reportersByClientId.get(client.clientId);
             reporters?.forEach(reporter => reporter.deferred.resolve());
             this.reportersByClientId.delete(client.clientId);
@@ -134,5 +135,14 @@ export class ProgressHandler<TDocument extends vscode.CustomDocument = vscode.Cu
 
     protected progressReporterId(client: GlspVscodeClient<TDocument>, progressId: string): string {
         return `${client.clientId}_${progressId}`;
+    }
+
+    dispose(): void {
+        this.disposeListener.dispose();
+        this.reportersByClientId.forEach(progressReporters => {
+            progressReporters.forEach(reporter => reporter.deferred.resolve());
+            progressReporters.clear();
+        });
+        this.reportersByClientId.clear();
     }
 }

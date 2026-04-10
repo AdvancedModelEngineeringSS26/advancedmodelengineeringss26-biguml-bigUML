@@ -36,6 +36,7 @@ export interface RegisterClientOptions {
 export class VscodeConnector<TDocument extends vscode.CustomDocument = vscode.CustomDocument> implements vscode.Disposable {
     protected readonly clientDisposables = new Map<string, DisposableCollection>();
     protected readonly toDispose = new DisposableCollection();
+    protected disposed = false;
 
     constructor(
         @inject(TYPES.ClientManager) protected readonly clientManager: ClientManager<TDocument>,
@@ -143,6 +144,11 @@ export class VscodeConnector<TDocument extends vscode.CustomDocument = vscode.Cu
     }
 
     dispose(): void {
+        if (this.disposed) {
+            return;
+        }
+
+        this.disposed = true;
         this.toDispose.dispose();
         this.clientDisposables.forEach(disposables => disposables.dispose());
         this.clientDisposables.clear();

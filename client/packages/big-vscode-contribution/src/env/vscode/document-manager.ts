@@ -8,7 +8,7 @@
  **********************************************************************************/
 
 import { RequestModelAction, SaveModelAction } from '@eclipse-glsp/protocol';
-import { Deferred } from '@eclipse-glsp/vscode-integration';
+import { Deferred, DisposableCollection } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import * as vscode from 'vscode';
 import { TYPES } from '../common/types.js';
@@ -16,13 +16,12 @@ import type { ActionDispatcher } from './action-dispatcher.js';
 import type { ClientManager } from './client-manager.js';
 
 @injectable()
-export class DocumentManager<TDocument extends vscode.CustomDocument = vscode.CustomDocument> {
-    protected static readonly SAVE_TIMEOUT_MS = 10_000;
-
+export class DocumentManager<TDocument extends vscode.CustomDocument = vscode.CustomDocument> implements vscode.Disposable {
     protected readonly onDidChangeCustomDocumentEmitter = new vscode.EventEmitter<
         vscode.CustomDocumentEditEvent<TDocument> | vscode.CustomDocumentContentChangeEvent<TDocument>
     >();
     protected readonly pendingSaves = new Map<string, Deferred<void>>();
+    protected readonly toDispose = new DisposableCollection();
     readonly onDidChangeCustomDocument = this.onDidChangeCustomDocumentEmitter.event;
 
     /**
@@ -33,7 +32,13 @@ export class DocumentManager<TDocument extends vscode.CustomDocument = vscode.Cu
     constructor(
         @inject(TYPES.ClientManager) protected readonly clientManager: ClientManager<TDocument>,
         @inject(TYPES.ActionDispatcher) protected readonly actionDispatcher: ActionDispatcher<TDocument>
-    ) {}
+    ) {
+        this.toDispose.push(
+            this.clientManager.onDidDispose(client => {
+                this.rejectPendingSave(client.clientId, `DocumentManager.saveDocument failed: save aborted because client ${client.clientId} was disposed.`);
+            })
+        );
+    }
 
     notifyDocumentSaved(clientId: string, _document: TDocument): void {
         const pendingSave = this.pendingSaves.get(clientId);
@@ -72,21 +77,7 @@ export class DocumentManager<TDocument extends vscode.CustomDocument = vscode.Cu
             throw new Error(`DocumentManager.saveDocument failed: could not dispatch save for client ${clientId}.`);
         }
 
-        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-        try {
-            await new Promise<void>((resolve, reject) => {
-                timeoutHandle = setTimeout(() => {
-                    this.pendingSaves.delete(clientId);
-                    reject(new Error(`DocumentManager.saveDocument failed: timed out waiting for save completion for client ${clientId}.`));
-                }, DocumentManager.SAVE_TIMEOUT_MS);
-
-                deferred.promise.then(resolve, reject);
-            });
-        } finally {
-            if (timeoutHandle) {
-                clearTimeout(timeoutHandle);
-            }
-        }
+        await deferred.promise;
     }
 
     async revertDocument(document: TDocument, diagramType: string): Promise<void> {
@@ -113,5 +104,27 @@ export class DocumentManager<TDocument extends vscode.CustomDocument = vscode.Cu
         if (!dispatched) {
             throw new Error(`DocumentManager.revertDocument failed: could not dispatch revert for client ${clientId}.`);
         }
+    }
+
+    dispose(): void {
+        this.toDispose.dispose();
+        this.pendingSaves.forEach((_pendingSave, clientId) => {
+            this.rejectPendingSave(
+                clientId,
+                `DocumentManager.dispose aborted save because the document manager was disposed for client ${clientId}.`
+            );
+        });
+        this.pendingSaves.clear();
+        this.onDidChangeCustomDocumentEmitter.dispose();
+    }
+
+    protected rejectPendingSave(clientId: string, message: string): void {
+        const pendingSave = this.pendingSaves.get(clientId);
+        if (!pendingSave) {
+            return;
+        }
+
+        this.pendingSaves.delete(clientId);
+        pendingSave.reject(new Error(message));
     }
 }

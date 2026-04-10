@@ -28,7 +28,7 @@ export class SelectionHandler<TDocument extends vscode.CustomDocument = vscode.C
     handle(
         message: ActionMessage,
         client: GlspVscodeClient<TDocument> | undefined,
-        _origin: MessageOrigin
+        origin: MessageOrigin
     ): MessageProcessingResult {
         if (!client || !SelectAction.is(message.action)) {
             return unchangedMessage(message);
@@ -39,6 +39,13 @@ export class SelectionHandler<TDocument extends vscode.CustomDocument = vscode.C
             deselectedElementsIDs: message.action.deselectedElementsIDs
         };
         this.selectionTracker.setSelection(client.clientId, selection);
+
+        if (origin === 'client') {
+            return {
+                processedMessage: undefined,
+                messageChanged: true
+            };
+        }
 
         return unchangedMessage(message);
     }
