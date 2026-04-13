@@ -15,13 +15,19 @@ import { ReactHtmlProvider, WebviewEditorProvider } from '@borkdominik-biguml/bi
 import { type GLSPDiagramIdentifier, type GlspVscodeClient } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import {
+<<<<<<< HEAD
+=======
+    EventEmitter,
+    FileType,
+    Uri,
+    workspace,
+>>>>>>> 5ab0ace (Inject custom CSS stylesheets from .glsp/styles/ into diagram webview)
     type CancellationToken,
     type CustomDocument,
     type CustomDocumentBackup,
     type CustomDocumentBackupContext,
     type CustomDocumentEditEvent,
     type Event,
-    type Uri,
     type Webview,
     type WebviewPanel,
     type WebviewView
@@ -42,6 +48,7 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
 
     protected clients = new Map<string, GlspVscodeClient>();
     protected viewCounter = 0;
+    protected customStyleLinks: string[] = [];
 
     constructor(@inject(UmlDiagramEditorSettings) protected readonly settings: UmlDiagramEditorSettings) {
         super({
@@ -63,7 +70,33 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
     override async resolveCustomEditor(document: CustomDocument, webviewPanel: WebviewPanel, token: CancellationToken): Promise<void> {
         const client = await this.prepareGLSPClient(document, webviewPanel);
         this.clients.set(document.uri.toString(), client);
+        this.customStyleLinks = await this.collectCustomStyleLinks(document, webviewPanel.webview);
         return super.resolveCustomEditor(document, webviewPanel, token);
+    }
+
+    protected override getLocalResourceRoots(document: CustomDocument): Uri[] {
+        const roots = super.getLocalResourceRoots(document);
+        const workspaceFolder = workspace.getWorkspaceFolder(document.uri);
+        if (workspaceFolder) {
+            roots.push(workspaceFolder.uri);
+        }
+        return roots;
+    }
+
+    protected async collectCustomStyleLinks(document: CustomDocument, webview: Webview): Promise<string[]> {
+        const workspaceFolder = workspace.getWorkspaceFolder(document.uri);
+        if (!workspaceFolder) {
+            return [];
+        }
+        const stylesDir = Uri.joinPath(workspaceFolder.uri, '.glsp', 'styles');
+        try {
+            const entries = await workspace.fs.readDirectory(stylesDir);
+            return entries
+                .filter(([name, type]) => name.endsWith('.css') && type === FileType.File)
+                .map(([name]) => webview.asWebviewUri(Uri.joinPath(stylesDir, name)).toString());
+        } catch {
+            return [];
+        }
     }
 
     protected override resolveMessenger(webview: WebviewView | WebviewPanel): void {
@@ -80,7 +113,8 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
         const clientId = this.clients.get(context.uri.toString())?.clientId ?? 'unknown';
         return new ReactHtmlProvider({
             rootProvider: () => `<div id="${clientId}_container" style="height: 100%;"></div>`,
-            ...this.options.htmlOptions
+            ...this.options.htmlOptions,
+            customStyleLinks: this.customStyleLinks
         }).createHtml(this.extensionContext, webview);
     }
 
