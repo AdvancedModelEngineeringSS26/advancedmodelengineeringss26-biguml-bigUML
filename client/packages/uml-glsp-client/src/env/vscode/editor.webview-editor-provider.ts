@@ -19,6 +19,7 @@ import {
 =======
     EventEmitter,
     FileType,
+    RelativePattern,
     Uri,
     workspace,
 >>>>>>> 5ab0ace (Inject custom CSS stylesheets from .glsp/styles/ into diagram webview)
@@ -71,7 +72,30 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
         const client = await this.prepareGLSPClient(document, webviewPanel);
         this.clients.set(document.uri.toString(), client);
         this.customStyleLinks = await this.collectCustomStyleLinks(document, webviewPanel.webview);
+        this.setupStylesheetWatcher(document, webviewPanel);
         return super.resolveCustomEditor(document, webviewPanel, token);
+    }
+
+    protected setupStylesheetWatcher(document: CustomDocument, webviewPanel: WebviewPanel): void {
+        const workspaceFolder = workspace.getWorkspaceFolder(document.uri);
+        if (!workspaceFolder) {
+            return;
+        }
+
+        const watcher = workspace.createFileSystemWatcher(new RelativePattern(workspaceFolder, '.glsp/styles/*.css'));
+
+        const refresh = async (): Promise<void> => {
+            this.customStyleLinks = await this.collectCustomStyleLinks(document, webviewPanel.webview);
+            webviewPanel.webview.html = this.resolveHtml(webviewPanel.webview, document, Date.now());
+        };
+
+        const disposables = new DisposableCollection(
+            watcher,
+            watcher.onDidCreate(refresh),
+            watcher.onDidChange(refresh),
+            watcher.onDidDelete(refresh),
+            webviewPanel.onDidDispose(() => disposables.dispose())
+        );
     }
 
     protected override getLocalResourceRoots(document: CustomDocument): Uri[] {
@@ -109,13 +133,14 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
         );
     }
 
-    protected override resolveHtml(webview: Webview, context: CustomDocument): string {
+    protected override resolveHtml(webview: Webview, context: CustomDocument, cacheBust?: number): string {
         const clientId = this.clients.get(context.uri.toString())?.clientId ?? 'unknown';
-        return new ReactHtmlProvider({
+        const html = new ReactHtmlProvider({
             rootProvider: () => `<div id="${clientId}_container" style="height: 100%;"></div>`,
             ...this.options.htmlOptions,
             customStyleLinks: this.customStyleLinks
         }).createHtml(this.extensionContext, webview);
+        return cacheBust !== undefined ? html.replace('</head>', `<!-- v=${cacheBust} -->\n</head>`) : html;
     }
 
     override saveCustomDocument(document: CustomDocument, _cancellation: CancellationToken): Thenable<void> {
