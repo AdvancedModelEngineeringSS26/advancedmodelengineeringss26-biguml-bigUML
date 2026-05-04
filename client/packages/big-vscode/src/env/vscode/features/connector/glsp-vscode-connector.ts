@@ -39,15 +39,12 @@ export class BigVscodeMessagePropagationFilter {
 /**
  * Compatibility facade for the retained `big-vscode` connector surface.
  *
- * @deprecated Deprecated for new connector/runtime code. This class is retained
- * only so frozen first-party packages can continue to resolve
- * `TYPES.GlspVSCodeConnector` without source changes.
- *
- * Runtime ownership lives in `big-vscode-contribution`. New code should prefer:
- * - contribution `VscodeConnector` for client registration and document lifecycle
- * - contribution `ClientManager` for client lookup and active-client state
- * - contribution `ActionDispatcher` for dispatching actions
- * - contribution `ActionListener` for observing client/server/VS Code actions
+ * @deprecated Use the contribution runtime services from
+ * `@borkdominik-biguml/big-vscode-contribution/vscode` for new code:
+ * `VscodeConnector` for client registration and document lifecycle,
+ * `ClientManager` for client lookup and active-client state,
+ * `ActionDispatcher` for dispatching actions, and `ActionListener` for
+ * observing client/server/VS Code actions.
  *
  * See `client/docs/feature1/compatibility-layer.md`.
  */
@@ -93,8 +90,7 @@ export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vs
 
     /**
      * @deprecated Use contribution `ActionListener.onServerAction` or
-     * `ActionListener.registerServerListener(...)`. Retained only for frozen
-     * first-party packages.
+     * `ActionListener.registerServerListener(...)`.
      */
     get onServerActionMessage(): vscode.Event<any> {
         return this.contributionActionListener.onServerAction;
@@ -102,8 +98,7 @@ export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vs
 
     /**
      * @deprecated Use contribution `ActionListener.onClientAction` or
-     * `ActionListener.registerListener(...)`. Retained only for frozen
-     * first-party packages.
+     * `ActionListener.registerListener(...)`.
      */
     get onClientActionMessage(): vscode.Event<any> {
         return this.contributionActionListener.onClientAction;
@@ -111,8 +106,7 @@ export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vs
 
     /**
      * @deprecated Use contribution `ActionListener.onVscodeAction` or
-     * `ActionListener.registerVSCodeListener(...)`. Retained only for frozen
-     * first-party packages.
+     * `ActionListener.registerVSCodeListener(...)`.
      */
     get onVSCodeActionMessage(): vscode.Event<any> {
         return this.contributionActionListener.onVscodeAction;
@@ -136,17 +130,15 @@ export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vs
 
     /**
      * @deprecated Use contribution `ActionDispatcher.dispatch(action, clientId)`.
-     * Retained only for frozen first-party packages.
      */
     sendActionToActiveClient(action: Action): void {
         this.dispatchAction(action);
     }
 
     /**
-     * @deprecated Retained only for frozen first-party packages that still rely
-     * on the legacy helper name. New code should use contribution
-     * `ActionDispatcher.dispatch(action, clientId)` or direct endpoint
-     * communication only when bypassing action routing intentionally.
+     * @deprecated Use contribution `ActionDispatcher.dispatch(action, clientId)`
+     * for routed actions. Use `client.webviewEndpoint.sendMessage(...)`
+     * directly only when intentionally bypassing connector routing.
      */
     public sendActionToActiveServer(action: Action): void {
         this.clients.forEach(client => {
@@ -162,7 +154,7 @@ export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vs
     /**
      * @deprecated Use contribution `ActionDispatcher.dispatch(action, clientId)`
      * for routed actions or the GLSP server directly when intentionally bypassing
-     * connector routing. Retained only for frozen first-party packages.
+     * connector routing.
      */
     public sendActionToServer(clientId: string, action: Action): void {
         this.glspServer.onSendToServerEmitter.fire({

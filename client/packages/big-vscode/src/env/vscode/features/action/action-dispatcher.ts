@@ -19,16 +19,10 @@ import { VscodeAction } from '../../../common/vscode.action.js';
 /**
  * Compatibility wrapper over the contribution action dispatcher.
  *
- * @deprecated Deprecated for new connector/runtime code. Retained so frozen
- * first-party packages can continue resolving `TYPES.ActionDispatcher`.
- *
- * New code should inject contribution `ActionDispatcher` directly.
+ * @deprecated Inject contribution `ActionDispatcher` from
+ * `@borkdominik-biguml/big-vscode-contribution/vscode` for new code.
  *
  * See `client/docs/feature1/compatibility-layer.md`.
- *
- * `big-vscode` keeps this class so existing packages can keep resolving
- * `TYPES.ActionDispatcher` while the actual dispatch implementation lives in
- * `big-vscode-contribution`.
  */
 @injectable()
 export class ActionDispatcher implements Disposable {
@@ -39,6 +33,8 @@ export class ActionDispatcher implements Disposable {
 
     /**
      * Dispatches a request action to the GLSP client (server) and returns a promise that resolves with the response action.
+     *
+     * @deprecated Use contribution `ActionDispatcher.request(action, clientId?)`.
      */
     request<Res extends ResponseAction>(action: RequestAction<Res>): Promise<ActionMessage<Res>> {
         if (!action.requestId || action.requestId === '') {
@@ -51,6 +47,8 @@ export class ActionDispatcher implements Disposable {
     /**
      * Dispatches an action to the GLSP client (server).
      * This method will not wait for a response.
+     *
+     * @deprecated Use contribution `ActionDispatcher.dispatch(action, clientId?)`.
      */
     dispatch(action: Action | Action[]): void {
         this.dispatchToClient(undefined, action);
@@ -59,6 +57,8 @@ export class ActionDispatcher implements Disposable {
     /**
      * Dispatches an action to a specific GLSP client (server).
      * This method will not wait for a response.
+     *
+     * @deprecated Use contribution `ActionDispatcher.dispatch(action, clientId)`.
      */
     dispatchToClient(clientId: string | undefined, action: Action | Action[]): void {
         this.contributionActionDispatcher.dispatch(action, clientId);
@@ -67,6 +67,9 @@ export class ActionDispatcher implements Disposable {
     /**
      * Broadcasts an action to all GLSP clients (server).
      * This method will not wait for a response.
+     *
+     * @deprecated Use contribution `ClientManager.clients` and dispatch or send
+     * messages explicitly for each target client.
      */
     broadcast(action: Action): void {
         this.clientManager.clients.forEach(client => {
