@@ -10,6 +10,7 @@
 export const TYPES = {
     GlspVscodeServer: Symbol('GlspVscodeServer'),
     VscodeConnector: Symbol('VscodeConnector'),
+    VscodeContributionLifecycle: Symbol('VscodeContributionLifecycle'),
     ConnectorMessenger: Symbol('ConnectorMessenger'),
     ClientManager: Symbol('ClientManager'),
     ClientRegistrationContribution: Symbol('ClientRegistrationContribution'),

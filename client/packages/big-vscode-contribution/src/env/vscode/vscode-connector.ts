@@ -26,6 +26,7 @@ import type { ActionRouter } from './action-router.js';
 import type { ClientManager } from './client-manager.js';
 import type { ClientRegistrationContribution } from './client-registration.js';
 import type { DocumentManager } from './document-manager.js';
+import type { VscodeContributionLifecycle } from './vscode-contribution-lifecycle.js';
 
 export interface RegisterClientOptions {
     readonly disposeClientSessionArgs?: Args;
@@ -43,6 +44,7 @@ export class VscodeConnector<TDocument extends vscode.CustomDocument = vscode.Cu
         @inject(TYPES.ActionRouter) protected readonly actionRouter: ActionRouter<TDocument>,
         @inject(TYPES.ActionDispatcher) protected readonly actionDispatcher: ActionDispatcher<TDocument>,
         @inject(TYPES.DocumentManager) protected readonly documentManager: DocumentManager<TDocument>,
+        @inject(TYPES.VscodeContributionLifecycle) protected readonly lifecycle: VscodeContributionLifecycle,
         @inject(TYPES.GlspVscodeServer) @optional() protected readonly server?: GlspVscodeServer,
         @multiInject(TYPES.MessagePropagationFilter)
         @optional()
@@ -97,6 +99,13 @@ export class VscodeConnector<TDocument extends vscode.CustomDocument = vscode.Cu
         try {
             clientDisposables.push(client.webviewEndpoint.onActionMessage(message => this.onClientMessage(message)));
 
+            for (const contribution of this.clientRegistrationContributions) {
+                const disposable = contribution.onBeforeClientInitialize?.(client);
+                if (disposable) {
+                    clientDisposables.push(disposable);
+                }
+            }
+
             const glspClient = await this.server.glspClient;
             clientDisposables.push(client.webviewEndpoint.initialize(glspClient));
             clientDisposables.push(
@@ -109,7 +118,7 @@ export class VscodeConnector<TDocument extends vscode.CustomDocument = vscode.Cu
             );
 
             for (const contribution of this.clientRegistrationContributions) {
-                const disposable = contribution.onClientRegistered(client);
+                const disposable = contribution.onClientRegistered?.(client);
                 if (disposable) {
                     clientDisposables.push(disposable);
                 }
@@ -152,6 +161,7 @@ export class VscodeConnector<TDocument extends vscode.CustomDocument = vscode.Cu
         this.toDispose.dispose();
         this.clientDisposables.forEach(disposables => disposables.dispose());
         this.clientDisposables.clear();
+        this.lifecycle.dispose();
     }
 
     protected onServerMessage(message: unknown): void {

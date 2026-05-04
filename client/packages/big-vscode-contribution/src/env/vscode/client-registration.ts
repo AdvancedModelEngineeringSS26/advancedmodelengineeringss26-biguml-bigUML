@@ -11,10 +11,18 @@ import type { Disposable, GlspVscodeClient } from '@eclipse-glsp/vscode-integrat
 import type * as vscode from 'vscode';
 
 /**
- * Contribution point for consumer-side client initialization that should run
- * after the contribution-native connector has registered and initialized a
- * client session.
+ * Contribution point for consumer-side client initialization.
  */
 export interface ClientRegistrationContribution<TDocument extends vscode.CustomDocument = vscode.CustomDocument> {
-    onClientRegistered(client: GlspVscodeClient<TDocument>): Disposable | void;
+    /**
+     * Called after the client is registered with the connector, but before the
+     * webview endpoint is initialized. Use this for listeners that must observe
+     * startup messages emitted during endpoint initialization.
+     */
+    onBeforeClientInitialize?(client: GlspVscodeClient<TDocument>): Disposable | void;
+
+    /**
+     * Called after the webview endpoint has been initialized successfully.
+     */
+    onClientRegistered?(client: GlspVscodeClient<TDocument>): Disposable | void;
 }

@@ -17,7 +17,7 @@ import type { ThemeIntegration } from './theme-integration.js';
 export class ThemeClientRegistrationContribution implements ClientRegistrationContribution {
     constructor(@inject(TYPES.Theme) protected readonly themeIntegration: ThemeIntegration) {}
 
-    onClientRegistered(client: GlspVscodeClient) {
+    onBeforeClientInitialize(client: GlspVscodeClient) {
         return client.webviewEndpoint.onActionMessage(message => {
             if (GLSPIsReadyAction.is(message.action)) {
                 this.themeIntegration.updateTheme(client);

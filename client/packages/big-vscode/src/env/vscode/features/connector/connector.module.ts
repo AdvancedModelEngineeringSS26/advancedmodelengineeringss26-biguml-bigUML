@@ -22,11 +22,6 @@ export const connectorModule = new VscodeFeatureModule(context => {
     context.bind(CONTRIBUTION_TYPES.MessagePropagationFilter).to(BigVscodeMessagePropagationFilter).inSingletonScope();
     bindLifecycle(context, TYPES.GlspVSCodeConnector, BigGlspVSCodeConnector);
     context.bind(TYPES.OnDispose).toService(CONTRIBUTION_TYPES.VscodeConnector);
-    context.bind(TYPES.OnDispose).toService(CONTRIBUTION_TYPES.ClientManager);
-    context.bind(TYPES.OnDispose).toService(CONTRIBUTION_TYPES.SelectionTracker);
-    context.bind(TYPES.OnDispose).toService(CONTRIBUTION_TYPES.DocumentManager);
-    context.bind(TYPES.OnDispose).toService(CONTRIBUTION_TYPES.DiagnosticsHandler);
-    context.bind(TYPES.OnDispose).toService(CONTRIBUTION_TYPES.ProgressHandler);
 
     context.bind(TYPES.ConnectionManager).to(ConnectionManager).inSingletonScope();
     context.bind(TYPES.SelectionService).to(SelectionService).inSingletonScope();

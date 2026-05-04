@@ -25,6 +25,7 @@ export * from './navigation-handler.js';
 export * from './progress-handler.js';
 export * from './selection-handler.js';
 export * from './selection-tracker.js';
+export * from './vscode-contribution-lifecycle.js';
 export * from './vscode-connector.js';
 export * from './webview-endpoint-factory.js';
 export * from './webview-endpoint.js';

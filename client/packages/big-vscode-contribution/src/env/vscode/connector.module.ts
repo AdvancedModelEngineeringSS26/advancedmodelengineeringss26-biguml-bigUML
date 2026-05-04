@@ -26,6 +26,7 @@ import { NavigationHandler } from './navigation-handler.js';
 import { ProgressHandler } from './progress-handler.js';
 import { SelectionHandler } from './selection-handler.js';
 import { SelectionTracker } from './selection-tracker.js';
+import { VscodeContributionLifecycle } from './vscode-contribution-lifecycle.js';
 import { VscodeConnector } from './vscode-connector.js';
 import { DefaultWebviewEndpointFactory } from './webview-endpoint-factory.js';
 
@@ -51,6 +52,7 @@ export function createVscodeContributionModule(options: VscodeContributionModule
         bind(TYPES.WebviewEndpointFactory)
             .toDynamicValue(context => new DefaultWebviewEndpointFactory(context.container as Container))
             .inSingletonScope();
+        bind(TYPES.VscodeContributionLifecycle).to(VscodeContributionLifecycle).inSingletonScope();
         bind(TYPES.VscodeConnector).to(VscodeConnector).inSingletonScope();
 
         bind(TYPES.MessageHandler).to(MessageHandler).inSingletonScope();
