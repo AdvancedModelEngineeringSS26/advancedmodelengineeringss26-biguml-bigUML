@@ -15,14 +15,10 @@ import { ReactHtmlProvider, WebviewEditorProvider } from '@borkdominik-biguml/bi
 import { type GLSPDiagramIdentifier, type GlspVscodeClient } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import {
-<<<<<<< HEAD
-=======
-    EventEmitter,
     FileType,
     RelativePattern,
     Uri,
     workspace,
->>>>>>> 5ab0ace (Inject custom CSS stylesheets from .glsp/styles/ into diagram webview)
     type CancellationToken,
     type CustomDocument,
     type CustomDocumentBackup,
