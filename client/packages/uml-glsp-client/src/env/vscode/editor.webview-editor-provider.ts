@@ -12,7 +12,7 @@ import type {
     DefaultWebviewEndpointFactory as ContributionWebviewEndpointFactory
 } from '@borkdominik-biguml/big-vscode-contribution/vscode';
 import { ReactHtmlProvider, WebviewEditorProvider } from '@borkdominik-biguml/big-vscode/vscode';
-import { type GLSPDiagramIdentifier, type GlspVscodeClient } from '@eclipse-glsp/vscode-integration';
+import { DisposableCollection, type GLSPDiagramIdentifier, type GlspVscodeClient } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import {
     FileType,
