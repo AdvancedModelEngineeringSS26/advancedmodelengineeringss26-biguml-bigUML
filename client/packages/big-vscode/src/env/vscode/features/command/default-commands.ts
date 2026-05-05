@@ -6,7 +6,7 @@
  *
  * SPDX-License-Identifier: MIT
  *********************************************************************************/
-import { TYPES, type BigGlspVSCodeConnector, type GlspDiagramSettings } from '@borkdominik-biguml/big-vscode/vscode';
+import { TYPES, type ActionDispatcher, type GlspDiagramSettings, type SelectionService } from '@borkdominik-biguml/big-vscode/vscode';
 import { EnableToolsAction, FocusDomAction } from '@borkdominik-biguml/uml-glsp-server';
 import { CenterAction, FitToScreenAction, RequestExportSvgAction, SelectAllAction } from '@eclipse-glsp/protocol';
 import { inject, injectable, postConstruct } from 'inversify';
@@ -18,7 +18,8 @@ export class DefaultCommandsProvider {
     constructor(
         @inject(TYPES.ExtensionContext) protected readonly extensionContext: vscode.ExtensionContext,
         @inject(TYPES.GlspDiagramSettings) protected readonly diagramSettings: GlspDiagramSettings,
-        @inject(TYPES.GlspVSCodeConnector) protected readonly connector: BigGlspVSCodeConnector
+        @inject(TYPES.ActionDispatcher) protected readonly actionDispatcher: ActionDispatcher,
+        @inject(TYPES.SelectionService) protected readonly selectionService: SelectionService
     ) {}
 
     @postConstruct()
@@ -26,30 +27,30 @@ export class DefaultCommandsProvider {
         let selectedElements: string[] = [];
 
         this.extensionContext.subscriptions.push(
-            this.connector.onSelectionUpdate(_selectedElements => (selectedElements = _selectedElements.selectedElementsIDs))
+            this.selectionService.onDidSelectionChange(({ state }) => (selectedElements = [...state.selectedElementsIDs]))
         );
 
         this.extensionContext.subscriptions.push(
             vscode.commands.registerCommand(`${this.diagramSettings.name}.fit`, () => {
-                this.connector.sendActionToActiveClient(FitToScreenAction.create(selectedElements));
+                this.actionDispatcher.dispatch(FitToScreenAction.create(selectedElements));
             }),
             vscode.commands.registerCommand(`${this.diagramSettings.name}.center`, () => {
-                this.connector.sendActionToActiveClient(CenterAction.create(selectedElements));
+                this.actionDispatcher.dispatch(CenterAction.create(selectedElements));
             }),
             vscode.commands.registerCommand(`${this.diagramSettings.name}.selectAll`, () => {
-                this.connector.sendActionToActiveClient(SelectAllAction.create());
+                this.actionDispatcher.dispatch(SelectAllAction.create());
             }),
             vscode.commands.registerCommand(`${this.diagramSettings.name}.show.umlPanel`, () => {
                 vscode.commands.executeCommand('bigUml.panel.property-palette.focus');
             }),
             vscode.commands.registerCommand(`${this.diagramSettings.name}.exportAsSVG`, () => {
-                this.connector.sendActionToActiveClient(RequestExportSvgAction.create());
+                this.actionDispatcher.dispatch(RequestExportSvgAction.create());
             }),
             vscode.commands.registerCommand(`${this.diagramSettings.name}.editor.activateResizeMode`, () => {
-                this.connector.sendActionToActiveClient(EnableToolsAction.create(['glsp.resize-tool']));
+                this.actionDispatcher.dispatch(EnableToolsAction.create(['glsp.resize-tool']));
             }),
             vscode.commands.registerCommand(`${this.diagramSettings.name}.editor.showSearch`, () => {
-                this.connector.sendActionToActiveClient(
+                this.actionDispatcher.dispatch(
                     SetUIExtensionVisibilityAction.create({
                         extensionId: 'search-autocomplete-palette',
                         visible: true
@@ -57,16 +58,16 @@ export class DefaultCommandsProvider {
                 );
             }),
             vscode.commands.registerCommand(`${this.diagramSettings.name}.editor.focusToolPalette`, () => {
-                this.connector.sendActionToActiveClient(FocusDomAction.create('tool-palette'));
+                this.actionDispatcher.dispatch(FocusDomAction.create('tool-palette'));
             }),
             vscode.commands.registerCommand(`${this.diagramSettings.name}.editor.focusDiagram`, () => {
-                this.connector.sendActionToActiveClient(FocusDomAction.create('graph'));
+                this.actionDispatcher.dispatch(FocusDomAction.create('graph'));
             }),
             vscode.commands.registerCommand(`${this.diagramSettings.name}.editor.enablePrimaryElementNavigator`, () => {
-                this.connector.sendActionToActiveClient(EnableToolsAction.create(['uml.primary-element-navigator-tool']));
+                this.actionDispatcher.dispatch(EnableToolsAction.create(['uml.primary-element-navigator-tool']));
             }),
             vscode.commands.registerCommand(`${this.diagramSettings.name}.editor.enableSecondaryElementNavigator`, () => {
-                this.connector.sendActionToActiveClient(EnableToolsAction.create(['uml.secondary-element-navigator-tool']));
+                this.actionDispatcher.dispatch(EnableToolsAction.create(['uml.secondary-element-navigator-tool']));
             })
             /*
         vscode.commands.registerCommand(`${this.diagramSettings.name}.layout`, () => {
@@ -76,8 +77,8 @@ export class DefaultCommandsProvider {
         );
 
         this.extensionContext.subscriptions.push(
-            this.connector.onSelectionUpdate(n => {
-                selectedElements = n.selectedElementsIDs;
+            this.selectionService.onDidSelectionChange(({ state }) => {
+                selectedElements = [...state.selectedElementsIDs];
                 vscode.commands.executeCommand(
                     'setContext',
                     `${this.diagramSettings.name}.editorSelectedElementsAmount`,

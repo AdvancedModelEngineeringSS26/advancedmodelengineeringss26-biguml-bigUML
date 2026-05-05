@@ -6,31 +6,15 @@
  *
  * SPDX-License-Identifier: MIT
  *********************************************************************************/
-import { ReactHtmlProvider, TYPES, WebviewEditorProvider } from '@borkdominik-biguml/big-vscode/vscode';
-import {
-    ActionMessageNotification,
-    ClientStateChangeNotification,
-    Deferred,
-    DisposableCollection,
-    DisposeClientSessionRequest,
-    InitializeClientSessionRequest,
-    InitializeNotification,
-    InitializeServerRequest,
-    ShutdownServerNotification,
-    StartRequest,
-    StopRequest,
-    WebviewReadyNotification,
-    type ActionMessage,
-    type Disposable,
-    type GLSPClient,
-    type GLSPDiagramIdentifier,
-    type GlspVscodeClient,
-    type WebviewEndpoint,
-    type WebviewEndpointOptions
-} from '@eclipse-glsp/vscode-integration';
+import { TYPES as CONTRIBUTION_TYPES } from '@borkdominik-biguml/big-vscode-contribution';
+import type {
+    ConnectorMessenger as ContributionConnectorMessenger,
+    DefaultWebviewEndpointFactory as ContributionWebviewEndpointFactory
+} from '@borkdominik-biguml/big-vscode-contribution/vscode';
+import { ReactHtmlProvider, WebviewEditorProvider } from '@borkdominik-biguml/big-vscode/vscode';
+import { type GLSPDiagramIdentifier, type GlspVscodeClient } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import {
-    EventEmitter,
     type CancellationToken,
     type CustomDocument,
     type CustomDocumentBackup,
@@ -42,10 +26,6 @@ import {
     type WebviewPanel,
     type WebviewView
 } from 'vscode';
-import { Messenger } from 'vscode-messenger';
-import type { MessageParticipant } from 'vscode-messenger-common';
-import { GLSPIsReadyAction } from '../common/actions/editor.actions.js';
-import type { ThemeIntegration } from './features/theme/theme-integration.js';
 
 export const UmlDiagramEditorSettings = Symbol('UmlDiagramEditorSettings');
 export interface UmlDiagramEditorSettings {
@@ -55,8 +35,10 @@ export interface UmlDiagramEditorSettings {
 
 @injectable()
 export class UmlDiagramEditorProvider extends WebviewEditorProvider {
-    @inject(TYPES.Theme)
-    protected readonly themeIntegration: ThemeIntegration;
+    @inject(CONTRIBUTION_TYPES.WebviewEndpointFactory)
+    protected readonly webviewEndpointFactory: ContributionWebviewEndpointFactory;
+    @inject(CONTRIBUTION_TYPES.ConnectorMessenger)
+    protected readonly connectorMessenger: ContributionConnectorMessenger;
 
     protected clients = new Map<string, GlspVscodeClient>();
     protected viewCounter = 0;
@@ -134,9 +116,9 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
             clientId
         };
 
-        const endpoint = new UmlWebviewEndpoint({
+        const endpoint = this.webviewEndpointFactory.create({
             diagramIdentifier,
-            messenger: this.connector.messenger,
+            messenger: this.connectorMessenger.messenger,
             webviewPanel
         });
 
@@ -144,16 +126,10 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
             clientId: diagramIdentifier.clientId,
             diagramType: diagramIdentifier.diagramType,
             document,
-            webviewEndpoint: endpoint as any as WebviewEndpoint
+            webviewEndpoint: endpoint
         };
 
-        endpoint.onActionMessage(m => {
-            if (GLSPIsReadyAction.is(m.action)) {
-                this.themeIntegration.updateTheme(client);
-            }
-        });
-
-        this.webviewMessenger.reuse(this.connector.messenger, endpoint.messageParticipant);
+        this.webviewMessenger.reuse(endpoint.messenger, endpoint.messageParticipant);
         await this.connector.registerClient(client);
         return client;
     }
@@ -167,147 +143,5 @@ export namespace EditorProvider {
             uriString = 'file:///' + match[1] + ':' + uriString.substring(match[0].length);
         }
         return uriString;
-    }
-}
-
-type PublicOf<T> = {
-    [K in keyof T]: T[K];
-};
-
-// Workaround as the WebviewEndpoint is not designed for webview reloads
-class UmlWebviewEndpoint implements PublicOf<WebviewEndpoint>, Disposable {
-    readonly webviewPanel: WebviewPanel;
-    readonly messenger: Messenger;
-    readonly messageParticipant: MessageParticipant;
-    readonly diagramIdentifier: GLSPDiagramIdentifier;
-
-    protected _readyDeferred = new Deferred<void>();
-    protected toDispose = new DisposableCollection();
-
-    protected onActionMessageEmitter = new EventEmitter<ActionMessage>();
-    get onActionMessage(): Event<ActionMessage> {
-        return this.onActionMessageEmitter.event;
-    }
-
-    protected _serverActions?: string[];
-    get serverActions(): string[] | undefined {
-        return this._serverActions;
-    }
-
-    protected _clientActions?: string[];
-    get clientActions(): string[] | undefined {
-        return this._clientActions;
-    }
-
-    constructor(options: WebviewEndpointOptions) {
-        this.webviewPanel = options.webviewPanel;
-        this.messenger = options.messenger ?? new Messenger();
-        this.diagramIdentifier = options.diagramIdentifier;
-        this.messageParticipant = this.messenger.registerWebviewPanel(this.webviewPanel);
-
-        this.toDispose.push(
-            this.webviewPanel.onDidDispose(() => {
-                this.dispose();
-            }),
-            this.messenger.onNotification(
-                WebviewReadyNotification,
-                () => {
-                    // When the webview is reloaded, it will send the WebviewReadyNotification again.
-                    // In this case, we need to resend the diagram identifier to re-initialize the webview.
-                    if (this._readyDeferred.state === 'resolved') {
-                        this.sendDiagramIdentifier();
-                    } else {
-                        this._readyDeferred.resolve();
-                    }
-                },
-                {
-                    sender: this.messageParticipant
-                }
-            ),
-            this.onActionMessageEmitter
-        );
-    }
-
-    protected async sendDiagramIdentifier(): Promise<void> {
-        await this.ready;
-        if (this.diagramIdentifier) {
-            this.messenger.sendNotification(InitializeNotification, this.messageParticipant, this.diagramIdentifier);
-        }
-    }
-
-    /**
-     * Hooks up a {@link GLSPClient} with the underlying webview and send the `initialize` message to the webview
-     * (once its ready)
-     * The GLSP client is called remotely from the webview context via the `vscode-messenger` RPC
-     * protocol.
-     * @param glspClient The client that should be connected
-     * @returns A {@link Disposable} to dispose the remote connection and all attached listeners
-     */
-    initialize(glspClient: GLSPClient): Disposable {
-        const toDispose = new DisposableCollection();
-        toDispose.push(
-            this.messenger.onNotification(
-                ActionMessageNotification,
-                msg => {
-                    this.onActionMessageEmitter.fire(msg);
-                },
-                {
-                    sender: this.messageParticipant
-                }
-            ),
-            this.messenger.onRequest(StartRequest, () => glspClient.start(), { sender: this.messageParticipant }),
-            this.messenger.onRequest(
-                InitializeServerRequest,
-                async params => {
-                    const result = await glspClient.initializeServer(params);
-                    if (!this._serverActions) {
-                        this._serverActions = result.serverActions[this.diagramIdentifier.diagramType];
-                    }
-                    return result;
-                },
-                {
-                    sender: this.messageParticipant
-                }
-            ),
-            this.messenger.onRequest(
-                InitializeClientSessionRequest,
-                params => {
-                    if (!this._clientActions) {
-                        this._clientActions = params.clientActionKinds;
-                    }
-                    glspClient.initializeClientSession(params);
-                },
-                {
-                    sender: this.messageParticipant
-                }
-            ),
-            this.messenger.onRequest(DisposeClientSessionRequest, params => glspClient.disposeClientSession(params), {
-                sender: this.messageParticipant
-            }),
-            this.messenger.onRequest(ShutdownServerNotification, () => glspClient.shutdownServer(), {
-                sender: this.messageParticipant
-            }),
-            this.messenger.onRequest(StopRequest, () => glspClient.stop(), {
-                sender: this.messageParticipant
-            }),
-            glspClient.onCurrentStateChanged(state =>
-                this.messenger.sendNotification(ClientStateChangeNotification, this.messageParticipant, state)
-            )
-        );
-        this.toDispose.push(toDispose);
-        this.sendDiagramIdentifier();
-        return toDispose;
-    }
-
-    sendMessage(actionMessage: ActionMessage): void {
-        this.messenger.sendNotification(ActionMessageNotification, this.messageParticipant, actionMessage);
-    }
-
-    get ready(): Promise<void> {
-        return this._readyDeferred.promise;
-    }
-
-    dispose(): void {
-        this.toDispose.dispose();
     }
 }

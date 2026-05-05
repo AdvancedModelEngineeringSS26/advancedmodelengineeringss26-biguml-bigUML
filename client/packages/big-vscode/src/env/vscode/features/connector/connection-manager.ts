@@ -25,7 +25,10 @@ export interface ViewStateChangeEvent extends vscode.WebviewPanelOnDidChangeView
 
 /**
  * A manager for handling connections to GLSP clients in VS Code.
- * It is a wrapper around the GLSP connector to maintain all registered GLSP clients.
+ * It is a compatibility facade over the contribution-native client manager and
+ * retained event model. New connector/runtime code should prefer contribution
+ * `ClientManager` directly. This class remains supported for frozen first-party
+ * packages that resolve `TYPES.ConnectionManager`.
  */
 @injectable()
 export class ConnectionManager implements Disposable {

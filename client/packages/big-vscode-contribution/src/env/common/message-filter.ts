@@ -1,5 +1,5 @@
 /**********************************************************************************
- * Copyright (c) 2025 borkdominik and others.
+ * Copyright (c) 2026 borkdominik and others.
  *
  * This program and the accompanying materials are made available under the
  * terms of the MIT License which is available at https://opensource.org/licenses/MIT.
@@ -7,6 +7,8 @@
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
 
-export * from './theme-integration.js';
-export * from './theme-client-registration.contribution.js';
-export * from './theme.module.js';
+import type { MessageOrigin } from './message-routing.js';
+
+export interface VscodeMessagePropagationFilter {
+    filter(message: unknown, origin: MessageOrigin): unknown | undefined;
+}

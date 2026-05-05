@@ -1,12 +1,12 @@
 /**********************************************************************************
- * Copyright (c) 2025 borkdominik and others.
+ * Copyright (c) 2026 borkdominik and others.
  *
  * This program and the accompanying materials are made available under the
  * terms of the MIT License which is available at https://opensource.org/licenses/MIT.
  *
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
+import rootConfig from '../../eslint.config.js';
 
-export * from './theme-integration.js';
-export * from './theme-client-registration.contribution.js';
-export * from './theme.module.js';
+/** @type {import('eslint').Linter.Config[]} */
+export default [...rootConfig];
