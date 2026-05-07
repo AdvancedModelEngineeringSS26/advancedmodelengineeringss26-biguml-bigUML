@@ -12,16 +12,19 @@ import type {
     DefaultWebviewEndpointFactory as ContributionWebviewEndpointFactory
 } from '@borkdominik-biguml/big-vscode-contribution/vscode';
 import { ReactHtmlProvider, WebviewEditorProvider } from '@borkdominik-biguml/big-vscode/vscode';
-import { type GLSPDiagramIdentifier, type GlspVscodeClient } from '@eclipse-glsp/vscode-integration';
+import { DisposableCollection, type GLSPDiagramIdentifier, type GlspVscodeClient } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import {
+    FileType,
+    RelativePattern,
+    Uri,
+    workspace,
     type CancellationToken,
     type CustomDocument,
     type CustomDocumentBackup,
     type CustomDocumentBackupContext,
     type CustomDocumentEditEvent,
     type Event,
-    type Uri,
     type Webview,
     type WebviewPanel,
     type WebviewView
@@ -42,6 +45,7 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
 
     protected clients = new Map<string, GlspVscodeClient>();
     protected viewCounter = 0;
+    protected customStyleLinks: string[] = [];
 
     constructor(@inject(UmlDiagramEditorSettings) protected readonly settings: UmlDiagramEditorSettings) {
         super({
@@ -63,7 +67,56 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
     override async resolveCustomEditor(document: CustomDocument, webviewPanel: WebviewPanel, token: CancellationToken): Promise<void> {
         const client = await this.prepareGLSPClient(document, webviewPanel);
         this.clients.set(document.uri.toString(), client);
+        this.customStyleLinks = await this.collectCustomStyleLinks(document, webviewPanel.webview);
+        this.setupStylesheetWatcher(document, webviewPanel);
         return super.resolveCustomEditor(document, webviewPanel, token);
+    }
+
+    protected setupStylesheetWatcher(document: CustomDocument, webviewPanel: WebviewPanel): void {
+        const workspaceFolder = workspace.getWorkspaceFolder(document.uri);
+        if (!workspaceFolder) {
+            return;
+        }
+
+        const watcher = workspace.createFileSystemWatcher(new RelativePattern(workspaceFolder, '.glsp/styles/*.css'));
+
+        const refresh = async (): Promise<void> => {
+            this.customStyleLinks = await this.collectCustomStyleLinks(document, webviewPanel.webview);
+            webviewPanel.webview.html = this.resolveHtml(webviewPanel.webview, document, Date.now());
+        };
+
+        const disposables = new DisposableCollection(
+            watcher,
+            watcher.onDidCreate(refresh),
+            watcher.onDidChange(refresh),
+            watcher.onDidDelete(refresh),
+            webviewPanel.onDidDispose(() => disposables.dispose())
+        );
+    }
+
+    protected override getLocalResourceRoots(document: CustomDocument): Uri[] {
+        const roots = super.getLocalResourceRoots(document);
+        const workspaceFolder = workspace.getWorkspaceFolder(document.uri);
+        if (workspaceFolder) {
+            roots.push(workspaceFolder.uri);
+        }
+        return roots;
+    }
+
+    protected async collectCustomStyleLinks(document: CustomDocument, webview: Webview): Promise<string[]> {
+        const workspaceFolder = workspace.getWorkspaceFolder(document.uri);
+        if (!workspaceFolder) {
+            return [];
+        }
+        const stylesDir = Uri.joinPath(workspaceFolder.uri, '.glsp', 'styles');
+        try {
+            const entries = await workspace.fs.readDirectory(stylesDir);
+            return entries
+                .filter(([name, type]) => name.endsWith('.css') && type === FileType.File)
+                .map(([name]) => webview.asWebviewUri(Uri.joinPath(stylesDir, name)).toString());
+        } catch {
+            return [];
+        }
     }
 
     protected override resolveMessenger(webview: WebviewView | WebviewPanel): void {
@@ -76,12 +129,14 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
         );
     }
 
-    protected override resolveHtml(webview: Webview, context: CustomDocument): string {
+    protected override resolveHtml(webview: Webview, context: CustomDocument, cacheBust?: number): string {
         const clientId = this.clients.get(context.uri.toString())?.clientId ?? 'unknown';
-        return new ReactHtmlProvider({
+        const html = new ReactHtmlProvider({
             rootProvider: () => `<div id="${clientId}_container" style="height: 100%;"></div>`,
-            ...this.options.htmlOptions
+            ...this.options.htmlOptions,
+            customStyleLinks: this.customStyleLinks
         }).createHtml(this.extensionContext, webview);
+        return cacheBust !== undefined ? html.replace('</head>', `<!-- v=${cacheBust} -->\n</head>`) : html;
     }
 
     override saveCustomDocument(document: CustomDocument, _cancellation: CancellationToken): Thenable<void> {
