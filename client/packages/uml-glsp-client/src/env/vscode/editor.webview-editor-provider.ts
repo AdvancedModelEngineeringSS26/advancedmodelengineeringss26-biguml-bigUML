@@ -15,13 +15,15 @@ import { ReactHtmlProvider, WebviewEditorProvider } from '@borkdominik-biguml/bi
 import { type GLSPDiagramIdentifier, type GlspVscodeClient } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import {
+    FileType,
+    Uri,
+    workspace,
     type CancellationToken,
     type CustomDocument,
     type CustomDocumentBackup,
     type CustomDocumentBackupContext,
     type CustomDocumentEditEvent,
     type Event,
-    type Uri,
     type Webview,
     type WebviewPanel,
     type WebviewView
@@ -41,6 +43,7 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
     protected readonly connectorMessenger: ContributionConnectorMessenger;
 
     protected clients = new Map<string, GlspVscodeClient>();
+    protected renderingPlugins = new Map<string, string[]>();
     protected viewCounter = 0;
 
     constructor(@inject(UmlDiagramEditorSettings) protected readonly settings: UmlDiagramEditorSettings) {
@@ -63,7 +66,18 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
     override async resolveCustomEditor(document: CustomDocument, webviewPanel: WebviewPanel, token: CancellationToken): Promise<void> {
         const client = await this.prepareGLSPClient(document, webviewPanel);
         this.clients.set(document.uri.toString(), client);
-        return super.resolveCustomEditor(document, webviewPanel, token);
+        const pluginUris = await this.getRenderingPluginUris(document, webviewPanel.webview);
+        this.renderingPlugins.set(document.uri.toString(), pluginUris);
+        await super.resolveCustomEditor(document, webviewPanel, token);
+        // Base class sets localResourceRoots to extensionUri only — extend it to include
+        // the workspace folder so .glsp/rendering/*.js files can be loaded by the webview.
+        const workspaceFolder = workspace.getWorkspaceFolder(document.uri);
+        if (workspaceFolder) {
+            webviewPanel.webview.options = {
+                enableScripts: true,
+                localResourceRoots: [this.extensionContext.extensionUri, workspaceFolder.uri]
+            };
+        }
     }
 
     protected override resolveMessenger(webview: WebviewView | WebviewPanel): void {
@@ -78,10 +92,35 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
 
     protected override resolveHtml(webview: Webview, context: CustomDocument): string {
         const clientId = this.clients.get(context.uri.toString())?.clientId ?? 'unknown';
-        return new ReactHtmlProvider({
+        const html = new ReactHtmlProvider({
             rootProvider: () => `<div id="${clientId}_container" style="height: 100%;"></div>`,
             ...this.options.htmlOptions
         }).createHtml(this.extensionContext, webview);
+
+        const pluginBootstrap = `<script>window.__glspPlugins = window.__glspPlugins ?? [];</script>`;
+
+        const pluginScripts = (this.renderingPlugins.get(context.uri.toString()) ?? [])
+            .map(uri => `<script type="module" src="${uri}"></script>`)
+            .join('\n');
+
+        return html
+            .replace('<body>', `<body>\n${pluginBootstrap}`)
+            .replace('</body>', `${pluginScripts}\n</body>`);
+    }
+
+    protected async getRenderingPluginUris(document: CustomDocument, webview: Webview): Promise<string[]> {
+        const workspaceFolder = workspace.getWorkspaceFolder(document.uri);
+        if (!workspaceFolder) return [];
+
+        const renderingDir = Uri.joinPath(workspaceFolder.uri, '.glsp', 'rendering');
+        try {
+            const entries = await workspace.fs.readDirectory(renderingDir);
+            return entries
+                .filter(([name, fileType]) => name.endsWith('.js') && fileType === FileType.File)
+                .map(([name]) => webview.asWebviewUri(Uri.joinPath(renderingDir, name)).toString());
+        } catch {
+            return [];
+        }
     }
 
     override saveCustomDocument(document: CustomDocument, _cancellation: CancellationToken): Thenable<void> {
