@@ -44,6 +44,7 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
     protected readonly connectorMessenger: ContributionConnectorMessenger;
 
     protected clients = new Map<string, GlspVscodeClient>();
+    protected renderingPlugins = new Map<string, string[]>();
     protected viewCounter = 0;
     protected customStyleLinks: string[] = [];
 
@@ -69,6 +70,8 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
         this.clients.set(document.uri.toString(), client);
         this.customStyleLinks = await this.collectCustomStyleLinks(document, webviewPanel.webview);
         this.setupStylesheetWatcher(document, webviewPanel);
+        const pluginUris = await this.getRenderingPluginUris(document, webviewPanel.webview);
+        this.renderingPlugins.set(document.uri.toString(), pluginUris);
         return super.resolveCustomEditor(document, webviewPanel, token);
     }
 
@@ -131,12 +134,39 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
 
     protected override resolveHtml(webview: Webview, context: CustomDocument, cacheBust?: number): string {
         const clientId = this.clients.get(context.uri.toString())?.clientId ?? 'unknown';
-        const html = new ReactHtmlProvider({
+        let html = new ReactHtmlProvider({
             rootProvider: () => `<div id="${clientId}_container" style="height: 100%;"></div>`,
             ...this.options.htmlOptions,
             customStyleLinks: this.customStyleLinks
         }).createHtml(this.extensionContext, webview);
-        return cacheBust !== undefined ? html.replace('</head>', `<!-- v=${cacheBust} -->\n</head>`) : html;
+
+        if (cacheBust !== undefined) {
+            html = html.replace('</head>', `<!-- v=${cacheBust} -->\n</head>`);
+        }
+
+        const pluginBootstrap = `<script>window.__glspPlugins = window.__glspPlugins ?? [];</script>`;
+        const pluginScripts = (this.renderingPlugins.get(context.uri.toString()) ?? [])
+            .map(uri => `<script type="module" src="${uri}"></script>`)
+            .join('\n');
+
+        return html
+            .replace('<body>', `<body>\n${pluginBootstrap}`)
+            .replace('</body>', `${pluginScripts}\n</body>`);
+    }
+
+    protected async getRenderingPluginUris(document: CustomDocument, webview: Webview): Promise<string[]> {
+        const workspaceFolder = workspace.getWorkspaceFolder(document.uri);
+        if (!workspaceFolder) return [];
+
+        const renderingDir = Uri.joinPath(workspaceFolder.uri, '.glsp', 'rendering');
+        try {
+            const entries = await workspace.fs.readDirectory(renderingDir);
+            return entries
+                .filter(([name, fileType]) => name.endsWith('.js') && fileType === FileType.File)
+                .map(([name]) => `${webview.asWebviewUri(Uri.joinPath(renderingDir, name)).toString()}?v=${Date.now()}`);
+        } catch {
+            return [];
+        }
     }
 
     override saveCustomDocument(document: CustomDocument, _cancellation: CancellationToken): Thenable<void> {
