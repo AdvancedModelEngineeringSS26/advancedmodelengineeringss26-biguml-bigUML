@@ -61,6 +61,34 @@ export class ActionListener implements vscode.Disposable {
         return this.onVscodeAction(callback);
     }
 
+    on(kind: string, callback: (action: ActionMessage) => void): Disposable {
+    return this.registerListener(message => {
+        if (message.action.kind === kind) {
+            callback(message);
+            }
+        });
+    }
+
+    onClient(kind: string, callback: (action: ActionMessage) => void): Disposable {
+        return this.on(kind, callback);
+    }
+
+    onServer(kind: string, callback: (action: ActionMessage) => void): Disposable {
+        return this.registerServerListener(message => {
+            if (message.action.kind === kind) {
+                callback(message);
+            }
+        });
+    }
+
+    onVscode(kind: string, callback: (action: ActionMessage) => void): Disposable {
+        return this.registerVSCodeListener(message => {
+            if (message.action.kind === kind) {
+                callback(message);
+            }
+        });
+    }
+
     createCache(cachedActionKinds: string[]): CacheActionListener {
         return new CacheActionListener(this, cachedActionKinds);
     }
@@ -115,6 +143,13 @@ export class ActionRequestHandlerRegistry implements vscode.Disposable {
             })
         );
         return toDispose;
+    }
+
+    handleRequest<TRequest extends RequestAction<ResponseAction>, TResponse extends ResponseAction = ResponseAction>(
+    kind: TRequest['kind'],
+    handler: (action: ActionMessage<TRequest>) => MaybePromise<TResponse>
+    ): Disposable {
+        return this.handleGLSPRequest(kind, handler);
     }
 
     dispose(): void {

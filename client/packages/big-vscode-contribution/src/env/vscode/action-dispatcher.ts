@@ -73,6 +73,29 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
         return dispatched;
     }
 
+    /**
+     * Dispatches an action to a specific GLSP client.
+     *
+     * This is the contribution-native equivalent of the legacy
+     * big-vscode dispatchToClient API and keeps Feature 2 consumers from
+     * depending on compatibility wrappers.
+     */
+    dispatchToClient(clientId: string | undefined, actionOrActions: Action | readonly Action[]): boolean {
+        return this.dispatch(actionOrActions, clientId);
+    }
+
+    /**
+     * Broadcasts an action to all registered GLSP clients.
+     *
+     * Returns true if the action was dispatched to at least one client.
+     */
+    broadcast(actionOrActions: Action | readonly Action[]): boolean {
+        return this.clientManager.clients.reduce(
+            (dispatched, client) => this.dispatch(actionOrActions, client.clientId) || dispatched,
+            false
+        );
+    }
+
     async request<TResponse extends ResponseAction>(
         action: RequestAction<TResponse>,
         clientId?: string
