@@ -12,6 +12,7 @@ import {
     SelectSourceCodeFolderActionResponse,
     SelectTemplateFileActionResponse
 } from '@borkdominik-biguml/big-code-generation';
+import type { ActionMessage } from '@eclipse-glsp/vscode-integration';
 import type { WebviewMessenger, WebviewViewProviderOptions } from '@borkdominik-biguml/big-vscode/vscode';
 import {
     type ActionDispatcher,
@@ -65,7 +66,7 @@ export class CodeGenerationWebviewViewProvider extends WebviewViewProvider {
         const disposables = new DisposableCollection();
         disposables.push(
             super.resolveWebviewProtocol(messenger),
-            this.actionCache.onDidChange(message => this.actionMessenger.dispatch(message)),
+            this.actionCache.onDidChange((message: ActionMessage) => this.actionMessenger.dispatch(message)),
             this.connectionManager.onNoConnection(() => {}),
             this.modelState.onDidChangeModelState(() => {
                 this.requestCodeGeneration();

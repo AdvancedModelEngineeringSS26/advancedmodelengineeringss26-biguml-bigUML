@@ -6,6 +6,7 @@
  *
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
+import type { ActionMessage } from '@eclipse-glsp/vscode-integration';
 import type { WebviewMessenger, WebviewViewProviderOptions } from '@borkdominik-biguml/big-vscode/vscode';
 import { type CacheActionListener, TYPES, WebviewViewProvider } from '@borkdominik-biguml/big-vscode/vscode';
 import { DisposableCollection } from '@eclipse-glsp/vscode-integration';
@@ -55,7 +56,7 @@ export class RevisionManagementWebviewViewProvider extends WebviewViewProvider {
         const disposables = new DisposableCollection();
         disposables.push(
             super.resolveWebviewProtocol(messenger),
-            this.actionCache.onDidChange(message => this.actionMessenger.dispatch(message)),
+            this.actionCache.onDidChange((message: ActionMessage) => this.actionMessenger.dispatch(message)),
             vscode.commands.registerCommand('timeline.import', () => {
                 // console.log('timeline.import command triggered');
                 this.webviewView?.webview.postMessage({ action: 'import' });

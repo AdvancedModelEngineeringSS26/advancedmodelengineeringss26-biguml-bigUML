@@ -118,6 +118,15 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
 
     dispose(): void {
         this.toDispose.dispose();
+        this.rejectPendingRequests(
+            new Error('ActionDispatcher disposed before pending requests received a response.')
+        );
+    }
+
+    protected rejectPendingRequests(reason: Error): void {
+        for (const deferred of this.requests.values()) {
+            deferred.reject(reason);
+        }
         this.requests.clear();
     }
 
