@@ -6,10 +6,11 @@
  *
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
+import type { CacheActionListener } from '@borkdominik-biguml/big-vscode-contribution/vscode';
 import { ActionRequestHandlerRegistry } from '@borkdominik-biguml/big-vscode-contribution/vscode';
-import type { ActionMessage } from '@eclipse-glsp/vscode-integration';
 import type { WebviewMessenger, WebviewViewProviderOptions } from '@borkdominik-biguml/big-vscode/vscode';
-import { type CacheActionListener, TYPES, WebviewViewProvider } from '@borkdominik-biguml/big-vscode/vscode';
+import { TYPES, WebviewViewProvider } from '@borkdominik-biguml/big-vscode/vscode';
+import type { ActionMessage } from '@eclipse-glsp/vscode-integration';
 import { DisposableCollection } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable, postConstruct } from 'inversify';
 import type { Disposable } from 'vscode';

@@ -11,7 +11,7 @@ import type {
     ConnectorMessenger as ContributionConnectorMessenger,
     DefaultWebviewEndpointFactory as ContributionWebviewEndpointFactory
 } from '@borkdominik-biguml/big-vscode-contribution/vscode';
-import { ReactHtmlProvider, WebviewEditorProvider } from '@borkdominik-biguml/big-vscode/vscode';
+import { ReactHtmlProvider, TYPES, WebviewEditorProvider, type BigGlspVSCodeConnector } from '@borkdominik-biguml/big-vscode/vscode';
 import { DisposableCollection, type GLSPDiagramIdentifier, type GlspVscodeClient } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import {
@@ -42,6 +42,8 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
     protected readonly webviewEndpointFactory: ContributionWebviewEndpointFactory;
     @inject(CONTRIBUTION_TYPES.ConnectorMessenger)
     protected readonly connectorMessenger: ContributionConnectorMessenger;
+    @inject(TYPES.GlspVSCodeConnector)
+    protected readonly connector: BigGlspVSCodeConnector;
 
     protected clients = new Map<string, GlspVscodeClient>();
     protected renderingPlugins = new Map<string, string[]>();
@@ -149,9 +151,7 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
             .map(uri => `<script type="module" src="${uri}"></script>`)
             .join('\n');
 
-        return html
-            .replace('<body>', `<body>\n${pluginBootstrap}`)
-            .replace('</body>', `${pluginScripts}\n</body>`);
+        return html.replace('<body>', `<body>\n${pluginBootstrap}`).replace('</body>', `${pluginScripts}\n</body>`);
     }
 
     protected async getRenderingPluginUris(document: CustomDocument, webview: Webview): Promise<string[]> {

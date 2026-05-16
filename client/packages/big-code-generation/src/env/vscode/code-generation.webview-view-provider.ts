@@ -12,17 +12,10 @@ import {
     SelectSourceCodeFolderActionResponse,
     SelectTemplateFileActionResponse
 } from '@borkdominik-biguml/big-code-generation';
-import type { ActionMessage } from '@eclipse-glsp/vscode-integration';
+import type { CacheActionListener } from '@borkdominik-biguml/big-vscode-contribution/vscode';
 import type { WebviewMessenger, WebviewViewProviderOptions } from '@borkdominik-biguml/big-vscode/vscode';
-import {
-    type ActionDispatcher,
-    type CacheActionListener,
-    type ConnectionManager,
-    type GlspModelState,
-    TYPES,
-    WebviewViewProvider
-} from '@borkdominik-biguml/big-vscode/vscode';
-import { DisposableCollection } from '@eclipse-glsp/vscode-integration';
+import { TYPES, WebviewViewProvider, type ConnectionManager, type GlspModelState } from '@borkdominik-biguml/big-vscode/vscode';
+import { DisposableCollection, type ActionMessage } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable, postConstruct } from 'inversify';
 import type { Disposable } from 'vscode';
 
@@ -33,9 +26,6 @@ export class CodeGenerationWebviewViewProvider extends WebviewViewProvider {
 
     @inject(TYPES.GlspModelState)
     protected readonly modelState: GlspModelState;
-
-    @inject(TYPES.ActionDispatcher)
-    protected readonly actionDispatcher: ActionDispatcher;
 
     protected actionCache: CacheActionListener;
 
