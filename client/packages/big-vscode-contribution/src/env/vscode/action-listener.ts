@@ -7,6 +7,7 @@
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
 
+import type { Action } from '@eclipse-glsp/protocol';
 import {
     DisposableCollection,
     type ActionMessage,
@@ -23,11 +24,6 @@ import type { HandledActionRegistry } from './handled-action-registry.js';
 
 @injectable()
 export class ActionListener implements vscode.Disposable {
-    /**
-     * Contribution-native observation service for client, server, and
-     * extension-host actions. This replaces direct action stream access on the
-     * compatibility connector for new code.
-     */
     protected readonly onClientActionEmitter = new vscode.EventEmitter<ActionMessage>();
     readonly onClientAction = this.onClientActionEmitter.event;
 
@@ -61,30 +57,51 @@ export class ActionListener implements vscode.Disposable {
         return this.onVscodeAction(callback);
     }
 
-    on(kind: string, callback: (action: ActionMessage) => void): Disposable {
-    return this.registerListener(message => {
-        if (message.action.kind === kind) {
-            callback(message);
+    on<TAction extends Action = Action>(
+        actionKind: string,
+        handler: (message: ActionMessage<TAction>, action: TAction, clientId: string) => void
+    ): Disposable {
+        const toDispose = new DisposableCollection();
+
+        const listener = (message: ActionMessage): void => {
+            if (message.action.kind === actionKind) {
+                handler(message as ActionMessage<TAction>, message.action as TAction, message.clientId);
+            }
+        };
+
+        toDispose.push(this.onClientAction(listener), this.onServerAction(listener), this.onVscodeAction(listener));
+        return toDispose;
+    }
+
+    onClient<TAction extends Action = Action>(
+        actionKind: string,
+        handler: (message: ActionMessage<TAction>, action: TAction, clientId: string) => void
+    ): Disposable {
+        return this.onClientAction(message => {
+            if (message.action.kind === actionKind) {
+                handler(message as ActionMessage<TAction>, message.action as TAction, message.clientId);
             }
         });
     }
 
-    onClient(kind: string, callback: (action: ActionMessage) => void): Disposable {
-        return this.on(kind, callback);
-    }
-
-    onServer(kind: string, callback: (action: ActionMessage) => void): Disposable {
-        return this.registerServerListener(message => {
-            if (message.action.kind === kind) {
-                callback(message);
+    onServer<TAction extends Action = Action>(
+        actionKind: string,
+        handler: (message: ActionMessage<TAction>, action: TAction, clientId: string) => void
+    ): Disposable {
+        return this.onServerAction(message => {
+            if (message.action.kind === actionKind) {
+                handler(message as ActionMessage<TAction>, message.action as TAction, message.clientId);
             }
         });
     }
 
-    onVscode(kind: string, callback: (action: ActionMessage) => void): Disposable {
-        return this.registerVSCodeListener(message => {
-            if (message.action.kind === kind) {
-                callback(message);
+    onVSCode<TAction extends Action = Action>(
+        actionKind: string,
+        handler: (message: ActionMessage<TAction>, action: TAction, clientId: string) => void
+    ): Disposable {
+        return this.onVscodeAction(message => {
+            if (message.action.kind === actionKind) {
+                handler(message as ActionMessage<TAction>, message.action as TAction, message.clientId);
             }
         });
     }
@@ -102,11 +119,6 @@ export class ActionListener implements vscode.Disposable {
 
 @injectable()
 export class ActionRequestHandlerRegistry implements vscode.Disposable {
-    /**
-     * Contribution-native request/response registration for extension-host
-     * handled actions. New runtime code should use this instead of legacy
-     * request helper APIs on the compatibility wrappers.
-     */
     constructor(
         @inject(TYPES.ActionListener) protected readonly actionListener: ActionListener,
         @inject(TYPES.ActionDispatcher) protected readonly actionDispatcher: ActionDispatcher,
@@ -146,10 +158,10 @@ export class ActionRequestHandlerRegistry implements vscode.Disposable {
     }
 
     handleRequest<TRequest extends RequestAction<ResponseAction>, TResponse extends ResponseAction = ResponseAction>(
-    kind: TRequest['kind'],
-    handler: (action: ActionMessage<TRequest>) => MaybePromise<TResponse>
+        kind: TRequest['kind'],
+        handler: (action: ActionMessage<TRequest>) => MaybePromise<TResponse>
     ): Disposable {
-        return this.handleGLSPRequest(kind, handler);
+        return this.handleVSCodeRequest(kind, handler);
     }
 
     dispose(): void {

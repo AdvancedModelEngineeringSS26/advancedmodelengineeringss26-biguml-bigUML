@@ -12,19 +12,20 @@ import { Deferred, DisposableCollection, type ActionMessage, type GlspVscodeServ
 import { inject, injectable, optional } from 'inversify';
 import type * as vscode from 'vscode';
 import { TYPES } from '../common/types.js';
-import type { ClientManager } from './client-manager.js';
 import type { ActionListener } from './action-listener.js';
+import type { ClientManager } from './client-manager.js';
 import type { HandledActionRegistry } from './handled-action-registry.js';
+
+interface PendingRequest {
+    clientId: string;
+    deferred: Deferred<ActionMessage<any>>;
+}
 
 @injectable()
 export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.CustomDocument> implements vscode.Disposable {
-    protected readonly requests = new Map<string, Deferred<ActionMessage<any>>>();
+    protected readonly requests = new Map<string, PendingRequest>();
     protected readonly toDispose = new DisposableCollection();
 
-    /**
-     * Contribution-native action dispatching. This replaces direct dispatch
-     * through the compatibility connector for new runtime behavior.
-     */
     constructor(
         @inject(TYPES.ClientManager) protected readonly clientManager: ClientManager<TDocument>,
         @inject(TYPES.ActionListener) protected readonly actionListener: ActionListener,
@@ -33,7 +34,13 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
     ) {
         this.toDispose.push(
             this.actionListener.onClientAction(message => this.onActionMessage(message)),
-            this.actionListener.onServerAction(message => this.onActionMessage(message))
+            this.actionListener.onServerAction(message => this.onActionMessage(message)),
+            this.clientManager.onDidDispose(client =>
+                this.rejectPendingRequestsForClient(
+                    client.clientId,
+                    new Error(`GLSP client ${client.clientId} was disposed before pending requests received a response.`)
+                )
+            )
         );
     }
 
@@ -53,6 +60,7 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
             clientId: client.clientId,
             action
         };
+
         let dispatched = false;
 
         if (client.webviewEndpoint.clientActions?.includes(action.kind)) {
@@ -73,22 +81,10 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
         return dispatched;
     }
 
-    /**
-     * Dispatches an action to a specific GLSP client.
-     *
-     * This is the contribution-native equivalent of the legacy
-     * big-vscode dispatchToClient API and keeps Feature 2 consumers from
-     * depending on compatibility wrappers.
-     */
     dispatchToClient(clientId: string | undefined, actionOrActions: Action | readonly Action[]): boolean {
         return this.dispatch(actionOrActions, clientId);
     }
 
-    /**
-     * Broadcasts an action to all registered GLSP clients.
-     *
-     * Returns true if the action was dispatched to at least one client.
-     */
     broadcast(actionOrActions: Action | readonly Action[]): boolean {
         return this.clientManager.clients.reduce(
             (dispatched, client) => this.dispatch(actionOrActions, client.clientId) || dispatched,
@@ -100,14 +96,22 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
         action: RequestAction<TResponse>,
         clientId?: string
     ): Promise<ActionMessage<TResponse>> {
+        const client = clientId ? this.clientManager.getClient(clientId) : this.clientManager.activeClient;
+        if (!client) {
+            throw new Error(`ActionDispatcher.request failed: no active or matching client found for request action ${action.kind}.`);
+        }
+
         if (!action.requestId || action.requestId === '') {
             action.requestId = RequestAction.generateRequestId();
         }
 
         const deferred = new Deferred<ActionMessage<TResponse>>();
-        this.requests.set(action.requestId, deferred as unknown as Deferred<ActionMessage<any>>);
+        this.requests.set(action.requestId, {
+            clientId: client.clientId,
+            deferred: deferred as unknown as Deferred<ActionMessage<any>>
+        });
 
-        const dispatched = this.dispatch(action, clientId);
+        const dispatched = this.dispatch(action, client.clientId);
         if (!dispatched) {
             this.requests.delete(action.requestId);
             throw new Error(`ActionDispatcher.request failed: could not dispatch request action ${action.kind}.`);
@@ -118,16 +122,23 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
 
     dispose(): void {
         this.toDispose.dispose();
-        this.rejectPendingRequests(
-            new Error('ActionDispatcher disposed before pending requests received a response.')
-        );
+        this.rejectPendingRequests(new Error('ActionDispatcher disposed before pending requests received a response.'));
     }
 
     protected rejectPendingRequests(reason: Error): void {
-        for (const deferred of this.requests.values()) {
-            deferred.reject(reason);
+        for (const pendingRequest of this.requests.values()) {
+            pendingRequest.deferred.reject(reason);
         }
         this.requests.clear();
+    }
+
+    protected rejectPendingRequestsForClient(clientId: string, reason: Error): void {
+        for (const [requestId, pendingRequest] of this.requests.entries()) {
+            if (pendingRequest.clientId === clientId) {
+                pendingRequest.deferred.reject(reason);
+                this.requests.delete(requestId);
+            }
+        }
     }
 
     protected onActionMessage(message: ActionMessage): void {
@@ -135,10 +146,10 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
             return;
         }
 
-        const deferred = this.requests.get(message.action.responseId);
-        if (deferred) {
+        const pendingRequest = this.requests.get(message.action.responseId);
+        if (pendingRequest) {
             this.requests.delete(message.action.responseId);
-            deferred.resolve(message);
+            pendingRequest.deferred.resolve(message);
         }
     }
 }
