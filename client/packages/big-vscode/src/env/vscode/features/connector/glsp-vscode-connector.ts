@@ -12,9 +12,10 @@ import type {
     ActionListener as ContributionActionListener,
     ClientManager as ContributionClientManager,
     ConnectorMessenger as ContributionConnectorMessenger,
+    SelectionTracker as ContributionSelectionTracker,
     VscodeConnector as ContributionVscodeConnector
 } from '@borkdominik-biguml/big-vscode-contribution/vscode';
-import { type Action, ActionMessage, type Args, type GlspVscodeClient, type GlspVscodeServer } from '@eclipse-glsp/vscode-integration';
+import { type Action, ActionMessage, type Args, type GlspVscodeClient, type GlspVscodeServer, type SelectionState } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import type * as vscode from 'vscode';
 import { VscodeAction } from '../../../common/vscode.action.js';
@@ -61,7 +62,9 @@ export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vs
         @inject(CONTRIBUTION_TYPES.ActionListener)
         protected readonly contributionActionListener: ContributionActionListener,
         @inject(CONTRIBUTION_TYPES.ConnectorMessenger)
-        protected readonly connectorMessenger: ContributionConnectorMessenger
+        protected readonly connectorMessenger: ContributionConnectorMessenger,
+        @inject(CONTRIBUTION_TYPES.SelectionTracker)
+        protected readonly contributionSelectionTracker: ContributionSelectionTracker
     ) {}
 
     get messenger() {
@@ -174,6 +177,14 @@ export class BigGlspVSCodeConnector<TDocument extends vscode.CustomDocument = vs
         if (!dispatched) {
             console.warn('Could not dispatch action. No handler found for action kind:', action.kind);
         }
+    }
+
+    getSelectionState(clientId?: string): SelectionState | undefined {
+        const targetClientId = clientId ?? this.clientManager.activeClient?.clientId;
+        if (!targetClientId) {
+            return undefined;
+        }
+        return this.contributionSelectionTracker.getSelection(targetClientId) as SelectionState | undefined;
     }
 
     saveDocument(document: TDocument, destination?: vscode.Uri): Promise<void> {

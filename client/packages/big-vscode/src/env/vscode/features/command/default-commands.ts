@@ -6,9 +6,9 @@
  *
  * SPDX-License-Identifier: MIT
  *********************************************************************************/
-import { TYPES, type ActionDispatcher, type GlspDiagramSettings, type SelectionService } from '@borkdominik-biguml/big-vscode/vscode';
+import { TYPES, type ActionDispatcher, type ActionListener, type GlspDiagramSettings, type SelectionService } from '@borkdominik-biguml/big-vscode/vscode';
 import { EnableToolsAction, FocusDomAction } from '@borkdominik-biguml/uml-glsp-server';
-import { CenterAction, FitToScreenAction, RequestExportSvgAction, SelectAllAction } from '@eclipse-glsp/protocol';
+import { CenterAction, FitToScreenAction, RequestExportSvgAction, SelectAction, SelectAllAction } from '@eclipse-glsp/protocol';
 import { inject, injectable, postConstruct } from 'inversify';
 import { SetUIExtensionVisibilityAction } from 'sprotty/lib/base/ui-extensions/ui-extension-registry.js';
 import * as vscode from 'vscode';
@@ -19,6 +19,7 @@ export class DefaultCommandsProvider {
         @inject(TYPES.ExtensionContext) protected readonly extensionContext: vscode.ExtensionContext,
         @inject(TYPES.GlspDiagramSettings) protected readonly diagramSettings: GlspDiagramSettings,
         @inject(TYPES.ActionDispatcher) protected readonly actionDispatcher: ActionDispatcher,
+        @inject(TYPES.ActionListener) protected readonly actionListener: ActionListener,
         @inject(TYPES.SelectionService) protected readonly selectionService: SelectionService
     ) {}
 
@@ -26,9 +27,8 @@ export class DefaultCommandsProvider {
     protected init(): void {
         let selectedElements: string[] = [];
 
-        this.extensionContext.subscriptions.push(
-            this.selectionService.onDidSelectionChange(({ state }) => (selectedElements = [...state.selectedElementsIDs]))
-        );
+        const selectionStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+        this.extensionContext.subscriptions.push(selectionStatusBarItem);
 
         this.extensionContext.subscriptions.push(
             vscode.commands.registerCommand(`${this.diagramSettings.name}.fit`, () => {
@@ -68,7 +68,8 @@ export class DefaultCommandsProvider {
             }),
             vscode.commands.registerCommand(`${this.diagramSettings.name}.editor.enableSecondaryElementNavigator`, () => {
                 this.actionDispatcher.dispatch(EnableToolsAction.create(['uml.secondary-element-navigator-tool']));
-            })
+            }),
+            vscode.commands.registerCommand(`${this.diagramSettings.name}.getSelection`, () => this.selectionService.selection)
             /*
         vscode.commands.registerCommand(`${this.diagramSettings.name}.layout`, () => {
             this.connector.sendActionToActiveClient(LayoutOperation.create([]));
@@ -77,13 +78,26 @@ export class DefaultCommandsProvider {
         );
 
         this.extensionContext.subscriptions.push(
+            this.actionListener.registerListener(message => {
+                if (SelectAction.is(message.action)) {
+                    vscode.window.showInformationMessage(`Selection: ${JSON.stringify(message.action)}`);
+                }
+            })
+        );
+
+        this.extensionContext.subscriptions.push(
             this.selectionService.onDidSelectionChange(({ state }) => {
                 selectedElements = [...state.selectedElementsIDs];
-                vscode.commands.executeCommand(
-                    'setContext',
-                    `${this.diagramSettings.name}.editorSelectedElementsAmount`,
-                    selectedElements.length
-                );
+                const count = selectedElements.length;
+
+                vscode.commands.executeCommand('setContext', `${this.diagramSettings.name}.editorSelectedElementsAmount`, count);
+                vscode.commands.executeCommand('setContext', `${this.diagramSettings.name}.editorSelectedElementsIds`, selectedElements);
+
+                selectionStatusBarItem.text =
+                    count > 0 ? `$(pass) ${count} element${count === 1 ? '' : 's'} selected` : `$(circle-slash) No selection`;
+                selectionStatusBarItem.tooltip =
+                    count > 0 ? `Selected: ${selectedElements.join(', ')}` : 'No elements selected in diagram';
+                selectionStatusBarItem.show();
             })
         );
     }
