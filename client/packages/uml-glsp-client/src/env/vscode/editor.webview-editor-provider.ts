@@ -9,9 +9,10 @@
 import { TYPES as CONTRIBUTION_TYPES } from '@borkdominik-biguml/big-vscode-contribution';
 import type {
     ConnectorMessenger as ContributionConnectorMessenger,
-    DefaultWebviewEndpointFactory as ContributionWebviewEndpointFactory
+    DefaultWebviewEndpointFactory as ContributionWebviewEndpointFactory,
+    VscodeConnector
 } from '@borkdominik-biguml/big-vscode-contribution/vscode';
-import { ReactHtmlProvider, TYPES, WebviewEditorProvider, type BigGlspVSCodeConnector } from '@borkdominik-biguml/big-vscode/vscode';
+import { ReactHtmlProvider, TYPES, WebviewEditorProvider } from '@borkdominik-biguml/big-vscode/vscode';
 import { DisposableCollection, type GLSPDiagramIdentifier, type GlspVscodeClient } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import {
@@ -43,7 +44,7 @@ export class UmlDiagramEditorProvider extends WebviewEditorProvider {
     @inject(CONTRIBUTION_TYPES.ConnectorMessenger)
     protected readonly connectorMessenger: ContributionConnectorMessenger;
     @inject(TYPES.GlspVSCodeConnector)
-    protected readonly connector: BigGlspVSCodeConnector;
+    protected readonly connector: VscodeConnector;
 
     protected clients = new Map<string, GlspVscodeClient>();
     protected renderingPlugins = new Map<string, string[]>();

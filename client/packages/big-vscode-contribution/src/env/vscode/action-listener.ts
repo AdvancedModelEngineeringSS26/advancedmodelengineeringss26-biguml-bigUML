@@ -141,6 +141,13 @@ export class ActionRequestHandlerRegistry implements vscode.Disposable {
         return toDispose;
     }
 
+    handleClientRequest<TRequest extends RequestAction<ResponseAction>, TResponse extends ResponseAction = ResponseAction>(
+        kind: TRequest['kind'],
+        handler: (action: ActionMessage<TRequest>) => MaybePromise<TResponse>
+    ): Disposable {
+        return this.handleGLSPRequest(kind, handler);
+    }
+
     handleVSCodeRequest<TRequest extends RequestAction<ResponseAction>, TResponse extends ResponseAction = ResponseAction>(
         kind: TRequest['kind'],
         handler: (action: ActionMessage<TRequest>) => MaybePromise<TResponse>
