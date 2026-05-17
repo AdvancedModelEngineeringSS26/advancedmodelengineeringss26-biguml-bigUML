@@ -7,6 +7,8 @@
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
 
+import { TYPES as CONTRIBUTION_TYPES } from '@borkdominik-biguml/big-vscode-contribution';
+import type { ClientManager } from '@borkdominik-biguml/big-vscode-contribution/vscode';
 import { Action, type ActionMessage } from '@eclipse-glsp/protocol';
 import { DisposableCollection, type Disposable } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
@@ -14,7 +16,6 @@ import * as vscode from 'vscode';
 import type { NotificationType } from 'vscode-messenger-common';
 import { ActionWebviewProtocol } from '../../../../common/index.js';
 import { TYPES } from '../../../vscode-common.types.js';
-import type { BigGlspVSCodeConnector } from '../../connector/glsp-vscode-connector.js';
 import { type WebviewMessenger } from './webview-messenger.js';
 
 @injectable()
@@ -27,8 +28,8 @@ export class ActionWebviewMessenger implements Disposable {
     @inject(TYPES.WebviewMessenger)
     protected readonly messenger: WebviewMessenger;
 
-    @inject(TYPES.GlspVSCodeConnector)
-    protected readonly connector: BigGlspVSCodeConnector;
+    @inject(CONTRIBUTION_TYPES.ClientManager)
+    protected readonly clientManager: ClientManager;
 
     resolve(): void {
         this.toDispose.push(
@@ -48,7 +49,7 @@ export class ActionWebviewMessenger implements Disposable {
         if (Action.is(message)) {
             this.messenger.sendNotification(ActionWebviewProtocol.Message, {
                 action: message,
-                clientId: this.connector.activeClient?.clientId
+                clientId: this.clientManager.activeClient?.clientId
             });
             return;
         }

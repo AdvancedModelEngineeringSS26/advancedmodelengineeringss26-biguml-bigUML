@@ -34,7 +34,7 @@ export abstract class BaseWebviewProvider implements Disposable {
     @inject(TYPES.ActionWebviewMessenger)
     protected readonly actionMessenger: ActionWebviewMessenger;
 
-    @inject(TYPES.ActionListener)
+    @inject(CONTRIBUTION_TYPES.ActionListener)
     protected readonly actionListener: ActionListener;
 
     protected readonly toDispose = new DisposableCollection();
