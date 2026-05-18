@@ -6,9 +6,9 @@
  *
  * SPDX-License-Identifier: MIT
  *********************************************************************************/
-import { TYPES, type ActionDispatcher, type ActionListener, type GlspDiagramSettings, type SelectionService } from '@borkdominik-biguml/big-vscode/vscode';
+import { TYPES, type ActionDispatcher, type GlspDiagramSettings, type SelectionService } from '@borkdominik-biguml/big-vscode/vscode';
 import { EnableToolsAction, FocusDomAction } from '@borkdominik-biguml/uml-glsp-server';
-import { CenterAction, FitToScreenAction, RequestExportSvgAction, SelectAction, SelectAllAction } from '@eclipse-glsp/protocol';
+import { CenterAction, FitToScreenAction, RequestExportSvgAction, SelectAllAction } from '@eclipse-glsp/protocol';
 import { inject, injectable, postConstruct } from 'inversify';
 import { SetUIExtensionVisibilityAction } from 'sprotty/lib/base/ui-extensions/ui-extension-registry.js';
 import * as vscode from 'vscode';
@@ -19,7 +19,6 @@ export class DefaultCommandsProvider {
         @inject(TYPES.ExtensionContext) protected readonly extensionContext: vscode.ExtensionContext,
         @inject(TYPES.GlspDiagramSettings) protected readonly diagramSettings: GlspDiagramSettings,
         @inject(TYPES.ActionDispatcher) protected readonly actionDispatcher: ActionDispatcher,
-        @inject(TYPES.ActionListener) protected readonly actionListener: ActionListener,
         @inject(TYPES.SelectionService) protected readonly selectionService: SelectionService
     ) {}
 
@@ -77,13 +76,18 @@ export class DefaultCommandsProvider {
         */
         );
 
+        const showSelectionDetailCommand = `${this.diagramSettings.name}.showSelectionDetail`;
         this.extensionContext.subscriptions.push(
-            this.actionListener.registerListener(message => {
-                if (SelectAction.is(message.action)) {
-                    vscode.window.showInformationMessage(`Selection: ${JSON.stringify(message.action)}`);
-                }
+            vscode.commands.registerCommand(showSelectionDetailCommand, () => {
+                const detail =
+                    selectedElements.length > 0
+                        ? `Selected elements (${selectedElements.length}):\n${selectedElements.join('\n')}`
+                        : 'No elements selected in diagram';
+                vscode.window.showInformationMessage(detail);
             })
         );
+
+        selectionStatusBarItem.command = showSelectionDetailCommand;
 
         this.extensionContext.subscriptions.push(
             this.selectionService.onDidSelectionChange(({ state }) => {
