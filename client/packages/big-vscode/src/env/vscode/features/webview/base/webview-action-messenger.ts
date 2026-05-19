@@ -8,8 +8,8 @@
  **********************************************************************************/
 
 import { TYPES as CONTRIBUTION_TYPES } from '@borkdominik-biguml/big-vscode-contribution';
-import type { ClientManager } from '@borkdominik-biguml/big-vscode-contribution/vscode';
-import { Action, type ActionMessage } from '@eclipse-glsp/protocol';
+import type { ActionDispatcher, ClientManager } from '@borkdominik-biguml/big-vscode-contribution/vscode';
+import { Action, RequestAction, type ActionMessage, type ResponseAction } from '@eclipse-glsp/protocol';
 import { DisposableCollection, type Disposable } from '@eclipse-glsp/vscode-integration';
 import { inject, injectable } from 'inversify';
 import * as vscode from 'vscode';
@@ -31,9 +31,13 @@ export class ActionWebviewMessenger implements Disposable {
     @inject(CONTRIBUTION_TYPES.ClientManager)
     protected readonly clientManager: ClientManager;
 
+    @inject(CONTRIBUTION_TYPES.ActionDispatcher)
+    protected readonly actionDispatcher: ActionDispatcher;
+
     resolve(): void {
         this.toDispose.push(
-            this.messenger.onNotification(ActionWebviewProtocol.Message, message => this.onActionMessageEmitter.fire(message))
+            this.messenger.onNotification(ActionWebviewProtocol.Message, message => this.onActionMessageEmitter.fire(message)),
+            this.messenger.onRequest(ActionWebviewProtocol.Request, message => this.request(message))
         );
     }
 
@@ -43,6 +47,26 @@ export class ActionWebviewMessenger implements Disposable {
 
     sendNotification<P>(type: NotificationType<P>, payload: P): void {
         this.messenger.sendNotification(type, payload);
+    }
+
+    async request(message: Action | ActionMessage): Promise<ActionMessage> {
+        const actionMessage = Action.is(message)
+            ? {
+                  action: message,
+                  clientId: this.clientManager.activeClient?.clientId
+              }
+            : message;
+
+        if (!RequestAction.is(actionMessage.action)) {
+            throw new Error(`Cannot send non-request action '${actionMessage.action.kind}' through ActionWebviewProtocol.Request.`);
+        }
+
+        if (!actionMessage.clientId) {
+            throw new Error(`Cannot send request action '${actionMessage.action.kind}' without an active client.`);
+        }
+
+        const response = await this.actionDispatcher.request<ResponseAction>(actionMessage.action, actionMessage.clientId);
+        return response;
     }
 
     dispatch(message: Action | ActionMessage | ActionMessage[]): void {

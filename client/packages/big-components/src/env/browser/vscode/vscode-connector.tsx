@@ -8,7 +8,8 @@
  **********************************************************************************/
 import { messenger } from '@borkdominik-biguml/big-components';
 import { ActionWebviewProtocol, WebviewProtocol } from '@borkdominik-biguml/big-vscode';
-import type { Action, ActionMessage } from '@eclipse-glsp/protocol';
+import type { Action, ResponseAction } from '@eclipse-glsp/protocol';
+import type { ActionMessage } from '@eclipse-glsp/vscode-integration';
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { HOST_EXTENSION } from 'vscode-messenger-common';
 import { VSCodeContext } from './vscode-context.js';
@@ -84,6 +85,24 @@ export function VSCodeConnector(props: VSCodeConnectorProps): ReactElement {
         [clientId, debug]
     );
 
+    const requestAction = useCallback(
+        async <TResponse extends ResponseAction = ResponseAction>(action: Action): Promise<TResponse> => {
+            debug('requesting action', action);
+
+            if (!clientId) {
+                throw new Error('Client ID is not set');
+            }
+
+            const response = await messenger.sendRequest<ActionMessage, ActionMessage>(ActionWebviewProtocol.Request, HOST_EXTENSION, {
+                clientId,
+                action
+            });
+
+            return response.action as TResponse;
+        },
+        [clientId, debug]
+    );
+
     return (
         <VSCodeContext.Provider
             value={{
@@ -91,7 +110,8 @@ export function VSCodeConnector(props: VSCodeConnectorProps): ReactElement {
                 listenNotification: (type, handler) => messenger.onNotification(type, handler),
                 dispatchNotification: (type, params) => messenger.sendNotification(type, HOST_EXTENSION, params),
                 listenAction,
-                dispatchAction
+                dispatchAction,
+                requestAction
             }}
         >
             {props.children}
