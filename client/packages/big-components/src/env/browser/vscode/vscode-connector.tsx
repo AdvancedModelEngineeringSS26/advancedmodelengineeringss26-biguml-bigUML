@@ -73,12 +73,8 @@ export function VSCodeConnector(props: VSCodeConnectorProps): ReactElement {
         (action: Action) => {
             debug('dispatching action', action);
 
-            if (!clientId) {
-                throw new Error('Client ID is not set');
-            }
-
             messenger.sendNotification(ActionWebviewProtocol.Message, HOST_EXTENSION, {
-                clientId,
+                clientId: clientId ?? '',
                 action
             });
         },
@@ -89,12 +85,8 @@ export function VSCodeConnector(props: VSCodeConnectorProps): ReactElement {
         async <TResponse extends ResponseAction = ResponseAction>(action: Action): Promise<TResponse> => {
             debug('requesting action', action);
 
-            if (!clientId) {
-                throw new Error('Client ID is not set');
-            }
-
             const response = await messenger.sendRequest<ActionMessage, ActionMessage>(ActionWebviewProtocol.Request, HOST_EXTENSION, {
-                clientId,
+                clientId: clientId ?? '',
                 action
             });
 

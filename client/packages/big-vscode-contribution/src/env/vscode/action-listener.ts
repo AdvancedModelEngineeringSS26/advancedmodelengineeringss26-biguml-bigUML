@@ -134,7 +134,7 @@ export class ActionRequestHandlerRegistry implements vscode.Disposable {
             this.handledActionRegistry.register(kind),
             this.actionListener.registerListener(message => {
                 if (message.action.kind === kind) {
-                    void this.dispatchHandledResponse(handler, message as ActionMessage<TRequest>);
+                    void this.dispatchHandledResponse(handler, message as ActionMessage<TRequest>, 'client');
                 }
             })
         );
@@ -157,7 +157,7 @@ export class ActionRequestHandlerRegistry implements vscode.Disposable {
             this.handledActionRegistry.register(kind),
             this.actionListener.registerVSCodeListener(message => {
                 if (message.action.kind === kind) {
-                    void this.dispatchHandledResponse(handler, message as ActionMessage<TRequest>);
+                    void this.dispatchHandledResponse(handler, message as ActionMessage<TRequest>, 'vscode');
                 }
             })
         );
@@ -177,9 +177,20 @@ export class ActionRequestHandlerRegistry implements vscode.Disposable {
 
     protected async dispatchHandledResponse<TRequest extends RequestAction<ResponseAction>, TResponse extends ResponseAction>(
         handler: (action: ActionMessage<TRequest>) => MaybePromise<TResponse>,
-        message: ActionMessage<TRequest>
+        message: ActionMessage<TRequest>,
+        source: 'client' | 'vscode'
     ): Promise<void> {
         const response = await handler(message);
+        response.responseId = message.action.requestId;
+
+        if (source === 'vscode') {
+            this.actionListener.emitVscodeAction({
+                clientId: message.clientId,
+                action: response
+            });
+            return;
+        }
+
         this.actionDispatcher.dispatch(response, message.clientId);
     }
 }

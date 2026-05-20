@@ -35,6 +35,7 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
         this.toDispose.push(
             this.actionListener.onClientAction(message => this.onActionMessage(message)),
             this.actionListener.onServerAction(message => this.onActionMessage(message)),
+            this.actionListener.onVscodeAction(message => this.onActionMessage(message)),
             this.clientManager.onDidDispose(client =>
                 this.rejectPendingRequestsForClient(
                     client.clientId,
@@ -81,7 +82,7 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
         return dispatched;
     }
 
-    dispatchToClient(clientId: string | undefined, actionOrActions: Action | readonly Action[]): boolean {
+    dispatchToClient(actionOrActions: Action | readonly Action[], clientId?: string): boolean {
         return this.dispatch(actionOrActions, clientId);
     }
 
@@ -101,19 +102,20 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
             throw new Error(`ActionDispatcher.request failed: no active or matching client found for request action ${action.kind}.`);
         }
 
-        if (!action.requestId || action.requestId === '') {
+        while (!action.requestId || action.requestId === '' || this.requests.has(this.requestKey(client.clientId, action.requestId))) {
             action.requestId = RequestAction.generateRequestId();
         }
 
         const deferred = new Deferred<ActionMessage<TResponse>>();
-        this.requests.set(action.requestId, {
+        const requestKey = this.requestKey(client.clientId, action.requestId);
+        this.requests.set(requestKey, {
             clientId: client.clientId,
             deferred: deferred as unknown as Deferred<ActionMessage<any>>
         });
 
         const dispatched = this.dispatch(action, client.clientId);
         if (!dispatched) {
-            this.requests.delete(action.requestId);
+            this.requests.delete(requestKey);
             throw new Error(`ActionDispatcher.request failed: could not dispatch request action ${action.kind}.`);
         }
 
@@ -133,10 +135,10 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
     }
 
     protected rejectPendingRequestsForClient(clientId: string, reason: Error): void {
-        for (const [requestId, pendingRequest] of this.requests.entries()) {
+        for (const [requestKey, pendingRequest] of this.requests.entries()) {
             if (pendingRequest.clientId === clientId) {
                 pendingRequest.deferred.reject(reason);
-                this.requests.delete(requestId);
+                this.requests.delete(requestKey);
             }
         }
     }
@@ -146,10 +148,15 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
             return;
         }
 
-        const pendingRequest = this.requests.get(message.action.responseId);
+        const requestKey = this.requestKey(message.clientId, message.action.responseId);
+        const pendingRequest = this.requests.get(requestKey);
         if (pendingRequest) {
-            this.requests.delete(message.action.responseId);
+            this.requests.delete(requestKey);
             pendingRequest.deferred.resolve(message);
         }
+    }
+
+    protected requestKey(clientId: string, requestId: string): string {
+        return `${clientId}:${requestId}`;
     }
 }

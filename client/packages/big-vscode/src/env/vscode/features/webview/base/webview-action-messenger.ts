@@ -36,7 +36,9 @@ export class ActionWebviewMessenger implements Disposable {
 
     resolve(): void {
         this.toDispose.push(
-            this.messenger.onNotification(ActionWebviewProtocol.Message, message => this.onActionMessageEmitter.fire(message)),
+            this.messenger.onNotification(ActionWebviewProtocol.Message, message =>
+                this.onActionMessageEmitter.fire(this.withClientId(message))
+            ),
             this.messenger.onRequest(ActionWebviewProtocol.Request, message => this.request(message))
         );
     }
@@ -49,13 +51,8 @@ export class ActionWebviewMessenger implements Disposable {
         this.messenger.sendNotification(type, payload);
     }
 
-    async request(message: Action | ActionMessage): Promise<ActionMessage> {
-        const actionMessage = Action.is(message)
-            ? {
-                  action: message,
-                  clientId: this.clientManager.activeClient?.clientId
-              }
-            : message;
+    async request(message: ActionMessage): Promise<ActionMessage> {
+        const actionMessage = this.withClientId(message);
 
         if (!RequestAction.is(actionMessage.action)) {
             throw new Error(`Cannot send non-request action '${actionMessage.action.kind}' through ActionWebviewProtocol.Request.`);
@@ -69,11 +66,18 @@ export class ActionWebviewMessenger implements Disposable {
         return response;
     }
 
+    protected withClientId(message: ActionMessage): ActionMessage {
+        return {
+            ...message,
+            clientId: message.clientId || this.clientManager.activeClient?.clientId || ''
+        };
+    }
+
     dispatch(message: Action | ActionMessage | ActionMessage[]): void {
         if (Action.is(message)) {
             this.messenger.sendNotification(ActionWebviewProtocol.Message, {
                 action: message,
-                clientId: this.clientManager.activeClient?.clientId
+                clientId: this.clientManager.activeClient?.clientId ?? ''
             });
             return;
         }
