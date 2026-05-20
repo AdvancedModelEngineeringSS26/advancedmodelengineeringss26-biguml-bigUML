@@ -69,8 +69,8 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
             dispatched = true;
         }
 
-        if (client.webviewEndpoint.serverActions?.includes(action.kind)) {
-            this.server?.onSendToServerEmitter.fire(message);
+        if (client.webviewEndpoint.serverActions?.includes(action.kind) && this.server) {
+            this.server.onSendToServerEmitter.fire(message);
             dispatched = true;
         }
 
@@ -83,7 +83,52 @@ export class ActionDispatcher<TDocument extends vscode.CustomDocument = vscode.C
     }
 
     dispatchToClient(actionOrActions: Action | readonly Action[], clientId?: string): boolean {
-        return this.dispatch(actionOrActions, clientId);
+        if (Array.isArray(actionOrActions)) {
+            return actionOrActions.reduce(
+                (dispatched, currentAction) => this.dispatchToClient(currentAction, clientId) || dispatched,
+                false
+            );
+        }
+
+        const client = clientId ? this.clientManager.getClient(clientId) : this.clientManager.activeClient;
+        if (!client) {
+            console.warn('ActionDispatcher.dispatchToClient skipped: no active or matching client found.', actionOrActions);
+            return false;
+        }
+
+        client.webviewEndpoint.sendMessage({
+            clientId: client.clientId,
+            action: actionOrActions
+        } as ActionMessage);
+
+        return true;
+    }
+
+    dispatchToServer(actionOrActions: Action | readonly Action[], clientId?: string): boolean {
+        if (Array.isArray(actionOrActions)) {
+            return actionOrActions.reduce(
+                (dispatched, currentAction) => this.dispatchToServer(currentAction, clientId) || dispatched,
+                false
+            );
+        }
+
+        const client = clientId ? this.clientManager.getClient(clientId) : this.clientManager.activeClient;
+        if (!client) {
+            console.warn('ActionDispatcher.dispatchToServer skipped: no active or matching client found.', actionOrActions);
+            return false;
+        }
+
+        if (!this.server) {
+            console.warn('ActionDispatcher.dispatchToServer skipped: no GLSP server is available.', actionOrActions);
+            return false;
+        }
+
+        this.server.onSendToServerEmitter.fire({
+            clientId: client.clientId,
+            action: actionOrActions
+        });
+
+        return true;
     }
 
     broadcast(actionOrActions: Action | readonly Action[]): boolean {
