@@ -7,6 +7,7 @@
  * SPDX-License-Identifier: MIT
  **********************************************************************************/
 
+import type { Action } from '@eclipse-glsp/protocol';
 import {
     DisposableCollection,
     type ActionMessage,
@@ -23,11 +24,6 @@ import type { HandledActionRegistry } from './handled-action-registry.js';
 
 @injectable()
 export class ActionListener implements vscode.Disposable {
-    /**
-     * Contribution-native observation service for client, server, and
-     * extension-host actions. This replaces direct action stream access on the
-     * compatibility connector for new code.
-     */
     protected readonly onClientActionEmitter = new vscode.EventEmitter<ActionMessage>();
     readonly onClientAction = this.onClientActionEmitter.event;
 
@@ -61,6 +57,55 @@ export class ActionListener implements vscode.Disposable {
         return this.onVscodeAction(callback);
     }
 
+    on<TAction extends Action = Action>(
+        actionKind: string,
+        handler: (message: ActionMessage<TAction>, action: TAction, clientId: string) => void
+    ): Disposable {
+        const toDispose = new DisposableCollection();
+
+        const listener = (message: ActionMessage): void => {
+            if (message.action.kind === actionKind) {
+                handler(message as ActionMessage<TAction>, message.action as TAction, message.clientId);
+            }
+        };
+
+        toDispose.push(this.onClientAction(listener), this.onServerAction(listener), this.onVscodeAction(listener));
+        return toDispose;
+    }
+
+    onClient<TAction extends Action = Action>(
+        actionKind: string,
+        handler: (message: ActionMessage<TAction>, action: TAction, clientId: string) => void
+    ): Disposable {
+        return this.onClientAction(message => {
+            if (message.action.kind === actionKind) {
+                handler(message as ActionMessage<TAction>, message.action as TAction, message.clientId);
+            }
+        });
+    }
+
+    onServer<TAction extends Action = Action>(
+        actionKind: string,
+        handler: (message: ActionMessage<TAction>, action: TAction, clientId: string) => void
+    ): Disposable {
+        return this.onServerAction(message => {
+            if (message.action.kind === actionKind) {
+                handler(message as ActionMessage<TAction>, message.action as TAction, message.clientId);
+            }
+        });
+    }
+
+    onVSCode<TAction extends Action = Action>(
+        actionKind: string,
+        handler: (message: ActionMessage<TAction>, action: TAction, clientId: string) => void
+    ): Disposable {
+        return this.onVscodeAction(message => {
+            if (message.action.kind === actionKind) {
+                handler(message as ActionMessage<TAction>, message.action as TAction, message.clientId);
+            }
+        });
+    }
+
     createCache(cachedActionKinds: string[]): CacheActionListener {
         return new CacheActionListener(this, cachedActionKinds);
     }
@@ -74,11 +119,6 @@ export class ActionListener implements vscode.Disposable {
 
 @injectable()
 export class ActionRequestHandlerRegistry implements vscode.Disposable {
-    /**
-     * Contribution-native request/response registration for extension-host
-     * handled actions. New runtime code should use this instead of legacy
-     * request helper APIs on the compatibility wrappers.
-     */
     constructor(
         @inject(TYPES.ActionListener) protected readonly actionListener: ActionListener,
         @inject(TYPES.ActionDispatcher) protected readonly actionDispatcher: ActionDispatcher,
@@ -94,11 +134,18 @@ export class ActionRequestHandlerRegistry implements vscode.Disposable {
             this.handledActionRegistry.register(kind),
             this.actionListener.registerListener(message => {
                 if (message.action.kind === kind) {
-                    void this.dispatchHandledResponse(handler, message as ActionMessage<TRequest>);
+                    void this.dispatchHandledResponse(handler, message as ActionMessage<TRequest>, 'client');
                 }
             })
         );
         return toDispose;
+    }
+
+    handleClientRequest<TRequest extends RequestAction<ResponseAction>, TResponse extends ResponseAction = ResponseAction>(
+        kind: TRequest['kind'],
+        handler: (action: ActionMessage<TRequest>) => MaybePromise<TResponse>
+    ): Disposable {
+        return this.handleGLSPRequest(kind, handler);
     }
 
     handleVSCodeRequest<TRequest extends RequestAction<ResponseAction>, TResponse extends ResponseAction = ResponseAction>(
@@ -110,11 +157,18 @@ export class ActionRequestHandlerRegistry implements vscode.Disposable {
             this.handledActionRegistry.register(kind),
             this.actionListener.registerVSCodeListener(message => {
                 if (message.action.kind === kind) {
-                    void this.dispatchHandledResponse(handler, message as ActionMessage<TRequest>);
+                    void this.dispatchHandledResponse(handler, message as ActionMessage<TRequest>, 'vscode');
                 }
             })
         );
         return toDispose;
+    }
+
+    handleRequest<TRequest extends RequestAction<ResponseAction>, TResponse extends ResponseAction = ResponseAction>(
+        kind: TRequest['kind'],
+        handler: (action: ActionMessage<TRequest>) => MaybePromise<TResponse>
+    ): Disposable {
+        return this.handleVSCodeRequest(kind, handler);
     }
 
     dispose(): void {
@@ -123,9 +177,20 @@ export class ActionRequestHandlerRegistry implements vscode.Disposable {
 
     protected async dispatchHandledResponse<TRequest extends RequestAction<ResponseAction>, TResponse extends ResponseAction>(
         handler: (action: ActionMessage<TRequest>) => MaybePromise<TResponse>,
-        message: ActionMessage<TRequest>
+        message: ActionMessage<TRequest>,
+        source: 'client' | 'vscode'
     ): Promise<void> {
         const response = await handler(message);
+        response.responseId = message.action.requestId;
+
+        if (source === 'vscode') {
+            this.actionListener.emitVscodeAction({
+                clientId: message.clientId,
+                action: response
+            });
+            return;
+        }
+
         this.actionDispatcher.dispatch(response, message.clientId);
     }
 }
