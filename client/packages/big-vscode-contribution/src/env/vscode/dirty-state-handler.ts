@@ -23,6 +23,8 @@ export class DirtyStateHandler<TDocument extends vscode.CustomDocument = vscode.
 {
     readonly actionKinds = [SetDirtyStateAction.KIND] as const;
 
+    protected readonly initializedClients = new Set<string>();
+
     constructor(
         @inject(TYPES.DocumentManager) protected readonly documentManager: DocumentManager<TDocument>,
         @inject(TYPES.ActionDispatcher) protected readonly actionDispatcher: ActionDispatcher<TDocument>
@@ -44,19 +46,25 @@ export class DirtyStateHandler<TDocument extends vscode.CustomDocument = vscode.
         const reason = action.reason;
 
         if (reason === 'save') {
+            this.initializedClients.add(client.clientId);
             this.documentManager.notifyDocumentSaved(client.clientId, client.document);
         } else if (reason === 'operation' && action.isDirty) {
-            this.documentManager.notifyDocumentEdit({
-                document: client.document,
-                undo: () => {
-                    this.actionDispatcher.dispatch(UndoAction.create(), client.clientId);
-                },
-                redo: () => {
-                    this.actionDispatcher.dispatch(RedoAction.create(), client.clientId);
-                }
-            });
-        } else if (action.isDirty && reason !== 'undo' && reason !== 'redo') {
-            this.documentManager.notifyDocumentChange(client.document);
+            if (this.initializedClients.has(client.clientId)) {
+                this.documentManager.notifyDocumentEdit({
+                    document: client.document,
+                    undo: () => {
+                        this.actionDispatcher.dispatch(UndoAction.create(), client.clientId);
+                    },
+                    redo: () => {
+                        this.actionDispatcher.dispatch(RedoAction.create(), client.clientId);
+                    }
+                });
+            }
+        } else if (!action.isDirty) {
+            this.initializedClients.add(client.clientId);
+            if (reason === 'undo' || reason === 'redo') {
+                this.documentManager.notifyDocumentSaved(client.clientId, client.document);
+            }
         }
 
         return {
