@@ -297,15 +297,20 @@ export class UmlToolPalette extends KeyboardToolPalette {
     }
 
     private applyColors(colors: Record<string, string>): void {
-        let style = document.getElementById(COLOR_STYLE_ID) as HTMLStyleElement | null;
-        if (!style) {
-            style = document.createElement('style');
-            style.id = COLOR_STYLE_ID;
-            document.head.appendChild(style);
-        }
+        // Always remove and re-append so our style is the last in <head>,
+        // guaranteeing it wins over any custom .glsp/styles/ stylesheets.
+        const existing = document.getElementById(COLOR_STYLE_ID);
+        if (existing) existing.remove();
+
+        if (Object.keys(colors).length === 0) return;
+
+        const style = document.createElement('style');
+        style.id = COLOR_STYLE_ID;
+        // !important so palette colors override custom CSS with equal specificity
         style.textContent = Object.entries(colors)
-            .map(([cssClass, color]) => `.${cssClass} { fill: ${color}; }`)
+            .map(([cssClass, color]) => `.${cssClass} { fill: ${color} !important; }`)
             .join('\n');
+        document.head.appendChild(style);
     }
 
     protected override createDefaultToolButton(): HTMLElement {
