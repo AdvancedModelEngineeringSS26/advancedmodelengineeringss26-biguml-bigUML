@@ -51,7 +51,9 @@ import inversify = require('inversify');
     RectangularNodeView,
     GClassNode,
     injectable: inversify.injectable,
-    CLASS_TYPE: ClassDiagramNodeTypes.CLASS
+    CLASS_TYPE: ClassDiagramNodeTypes.CLASS,
+    ABSTRACT_CLASS_TYPE: ClassDiagramNodeTypes.ABSTRACT_CLASS,
+    DATA_TYPE: ClassDiagramNodeTypes.DATA_TYPE
 };
 
 class UmlStarter extends GLSPStarter {
