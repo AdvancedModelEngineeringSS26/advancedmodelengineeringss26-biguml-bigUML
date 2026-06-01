@@ -6,7 +6,9 @@
  *
  * SPDX-License-Identifier: MIT
  *********************************************************************************/
-import { TYPES, type ActionDispatcher, type GlspDiagramSettings, type SelectionService } from '@borkdominik-biguml/big-vscode/vscode';
+import { TYPES as CONTRIBUTION_TYPES } from '@borkdominik-biguml/big-vscode-contribution';
+import type { ActionDispatcher } from '@borkdominik-biguml/big-vscode-contribution/vscode';
+import { TYPES, type GlspDiagramSettings, type SelectionService } from '@borkdominik-biguml/big-vscode/vscode';
 import { EnableToolsAction, FocusDomAction } from '@borkdominik-biguml/uml-glsp-server';
 import { CenterAction, FitToScreenAction, RequestExportSvgAction, SelectAllAction } from '@eclipse-glsp/protocol';
 import { inject, injectable, postConstruct } from 'inversify';
@@ -18,7 +20,7 @@ export class DefaultCommandsProvider {
     constructor(
         @inject(TYPES.ExtensionContext) protected readonly extensionContext: vscode.ExtensionContext,
         @inject(TYPES.GlspDiagramSettings) protected readonly diagramSettings: GlspDiagramSettings,
-        @inject(TYPES.ActionDispatcher) protected readonly actionDispatcher: ActionDispatcher,
+        @inject(CONTRIBUTION_TYPES.ActionDispatcher) protected readonly actionDispatcher: ActionDispatcher,
         @inject(TYPES.SelectionService) protected readonly selectionService: SelectionService
     ) {}
 

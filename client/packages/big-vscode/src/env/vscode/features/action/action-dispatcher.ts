@@ -51,7 +51,7 @@ export class ActionDispatcher implements Disposable {
      * @deprecated Use contribution `ActionDispatcher.dispatch(action, clientId?)`.
      */
     dispatch(action: Action | Action[]): void {
-        this.dispatchToClient(undefined, action);
+        this.contributionActionDispatcher.dispatch(action);
     }
 
     /**
@@ -61,7 +61,7 @@ export class ActionDispatcher implements Disposable {
      * @deprecated Use contribution `ActionDispatcher.dispatch(action, clientId)`.
      */
     dispatchToClient(clientId: string | undefined, action: Action | Action[]): void {
-        this.contributionActionDispatcher.dispatch(action, clientId);
+        this.contributionActionDispatcher.dispatchToClient(action, clientId);
     }
 
     /**
