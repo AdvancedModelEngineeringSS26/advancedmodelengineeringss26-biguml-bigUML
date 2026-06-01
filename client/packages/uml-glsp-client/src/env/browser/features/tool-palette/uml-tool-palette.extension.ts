@@ -84,6 +84,7 @@ const SEARCH_TOOL_KEY: KeyCode[] = ['Digit5', 'Numpad5'];
 @injectable()
 export class UmlToolPalette extends KeyboardToolPalette {
     declare defaultToolsButton: HTMLElement;
+    protected colorPanel?: HTMLElement;
 
     protected override onBeforeShow(_containerElement: HTMLElement, root: Readonly<GModelRoot>): void {
         // Removed max height
@@ -168,8 +169,7 @@ export class UmlToolPalette extends KeyboardToolPalette {
         button.title = 'Element colors (click to open color picker)';
         button.style.cssText = 'cursor:pointer; outline: 1px solid currentColor; border-radius:2px; padding:1px';
 
-        const panel = this.createColorPanel();
-        document.body.appendChild(panel);
+        const panel = this.getOrCreateColorPanel();
 
         button.onclick = event => {
             event.stopPropagation();
@@ -187,11 +187,18 @@ export class UmlToolPalette extends KeyboardToolPalette {
             }
         };
 
-        document.addEventListener('click', () => {
-            panel.style.display = 'none';
-        });
-
         return button;
+    }
+
+    protected getOrCreateColorPanel(): HTMLElement {
+        if (!this.colorPanel) {
+            this.colorPanel = this.createColorPanel();
+            document.body.appendChild(this.colorPanel);
+            document.addEventListener('click', () => {
+                this.colorPanel!.style.display = 'none';
+            });
+        }
+        return this.colorPanel;
     }
 
     protected createColorPanel(): HTMLElement {
