@@ -12,7 +12,7 @@ class CustomClassView extends RectangularNodeView {
         const cy = h / 2;
         const r = Math.min(cx, cy) * 2;
         return svg('g', { class: { selected: element.selected, mouseover: element.hoverFeedback } },
-            svg('circle', { attrs: { cx, cy, r, fill: '#2196F3', stroke: '#0D47A1', 'stroke-width': 2 } }),
+            svg('circle', { attrs: { cx, cy, r } }),
             context.renderChildren(element)
         );
     }
