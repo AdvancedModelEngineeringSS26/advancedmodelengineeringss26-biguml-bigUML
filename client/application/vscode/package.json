@@ -43,6 +43,7 @@
     "build",
     "server",
     "webviews",
+    "templates",
     "resources",
     "LICENSE",
     "README.md"
@@ -98,6 +99,12 @@
         "category": "bigUML",
         "enablement": "activeCustomEditorId == 'bigUML.diagramView'",
         "icon": "$(symbol-reference)"
+      },
+      {
+        "command": "bigUML.exportInstances",
+        "title": "Export Instances...",
+        "category": "bigUML",
+        "enablement": "activeCustomEditorId == 'bigUML.diagramView'"
       },
       {
         "command": "timeline.import",
@@ -219,6 +226,11 @@
     "menus": {
       "view/title": [
         {
+          "command": "bigUML.exportInstances",
+          "when": "view == bigUML.panel.instance-explorer",
+          "group": "navigation"
+        },
+        {
           "command": "timeline.import",
           "when": "view == bigUML.panel.revision-management",
           "group": "navigation"
@@ -286,6 +298,13 @@
           "when": "bigUML.isRunning"
         },
         {
+          "id": "bigUML.panel.instance-explorer",
+          "name": "Instances",
+          "type": "webview",
+          "visibility": "collapsed",
+          "when": "bigUML.isRunning"
+        },
+        {
           "id": "bigUML.panel.outline",
           "name": "Diagram Outline",
           "type": "tree",
@@ -309,6 +328,12 @@
           "name": "Timeline",
           "type": "webview",
           "when": "bigUML.isRunning"
+        },
+        {
+          "id": "bigUML.panel.object-to-class", 
+          "name": "Object to Class Preview",
+          "type": "webview",
+          "when" : "bigUML.isRunning"
         }
       ]
     },
@@ -323,12 +348,14 @@
     }
   },
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onCustomEditor:bigUML.diagramView"
   ],
   "dependencies": {
     "@borkdominik-biguml/big-advancedsearch": "*",
     "@borkdominik-biguml/big-code-generation": "*",
     "@borkdominik-biguml/big-common": "*",
+    "@borkdominik-biguml/big-instance-explorer": "*",
     "@borkdominik-biguml/big-minimap": "*",
     "@borkdominik-biguml/big-outline": "*",
     "@borkdominik-biguml/big-property-palette": "*",
@@ -337,6 +364,7 @@
     "@borkdominik-biguml/uml-glsp-client": "*",
     "@borkdominik-biguml/uml-glsp-server": "*",
     "@borkdominik-biguml/uml-model-server": "*",
+    "@borkdominik-biguml/big-object-to-class": "*",
     "@eclipse-glsp/protocol": "*",
     "@eclipse-glsp/vscode-integration": "*",
     "@vscode/codicons": "^0.0.25",

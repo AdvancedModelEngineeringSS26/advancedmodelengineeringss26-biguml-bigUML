@@ -87,6 +87,7 @@ type ClassDiagramEdges =
     | Composition
     | InterfaceRealization
     | Generalization
+    | InstanceLink
     | PackageImport
     | PackageMerge
     | Realization
@@ -255,8 +256,12 @@ export class PrimitiveType extends Node {
 export class InstanceSpecification extends Node {
     name: string;
     visibility?: Visibility;
+    @dynamicProperty('Classifier')
+    @crossReference
+    classifier?: InstanceClassifier;
     @path slots?: Array<Slot>;
 }
+type InstanceClassifier = Class | Interface | DataType;
 
 @toolPaletteItem({ section: 'Feature', label: 'Slot', icon: 'uml-slot-icon' })
 @noBounds
@@ -278,6 +283,19 @@ export class Relation extends Edge {
     @crossReference source: Node;
     @crossReference target: Node;
     relationType: RelationType;
+}
+
+@toolPaletteItem({
+    section: 'Relations',
+    label: 'Instance Link',
+    icon: 'uml-association-icon'
+})
+@withDefaults
+export class InstanceLink extends Relation {
+    name?: string;
+    @dynamicProperty('Association')
+    @crossReference
+    association?: Association;
 }
 
 @toolPaletteItem({
@@ -454,6 +472,7 @@ type RelationType =
     | 'COMPOSITION'
     | 'DEPENDENCY'
     | 'GENERALIZATION'
+    | 'INSTANCE_LINK'
     | 'INTERFACE_REALIZATION'
     | 'PACKAGE_IMPORT'
     | 'ELEMENT_IMPORT'

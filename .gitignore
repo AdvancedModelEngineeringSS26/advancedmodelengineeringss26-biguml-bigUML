@@ -2,3 +2,8 @@ node_modules
 *.log
 .idea
 .DS_Store
+client/lerna-debug.log*
+*.hash
+client/.nx
+/.vs
+/.claude/settings.local.json
